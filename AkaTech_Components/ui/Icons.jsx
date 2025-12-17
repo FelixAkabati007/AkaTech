@@ -18,6 +18,10 @@ import {
   Quote,
   CheckCircle, // For Success
   Info,
+  Plus,
+  Settings,
+  LifeBuoy,
+  FileText,
 } from "lucide-react";
 
 export const Icons = {
@@ -40,6 +44,10 @@ export const Icons = {
   Quote,
   Success: CheckCircle, // Mapping Success to CheckCircle
   Info,
+  Plus,
+  Settings,
+  LifeBuoy,
+  FileText,
   Google: (props) => (
     <svg
       {...props}

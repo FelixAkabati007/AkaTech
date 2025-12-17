@@ -1,9 +1,40 @@
-import React from "react";
+import React, { useState } from "react";
 import { Icons } from "@components/ui/Icons";
 import { Logo } from "@components/ui/Logo";
+import { Modal } from "@components/ui/Modal";
+import { useToast } from "@components/ui/ToastProvider";
 
 export const Dashboard = ({ user, onLogout }) => {
-  const isAdmin = user.email.includes("admin");
+  const isAdmin = user.isAdmin || user.email.includes("admin");
+  const [activeModal, setActiveModal] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { addToast } = useToast();
+
+  const handleQuickAction = (actionLabel) => {
+    switch (actionLabel) {
+      case "Create New Invoice":
+        setActiveModal("invoice");
+        break;
+      case "Update Profile Settings":
+        setActiveModal("profile");
+        break;
+      case "Contact Support":
+        setActiveModal("support");
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleSubmit = (e, type) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setTimeout(() => {
+      addToast(`${type} successful!`, "success");
+      setIsSubmitting(false);
+      setActiveModal(null);
+    }, 1000); // Simulate API call
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-akatech-dark pt-28 px-4 pb-12 transition-colors duration-500">
@@ -194,20 +225,46 @@ export const Dashboard = ({ user, onLogout }) => {
                 Quick Actions
               </h2>
               <div className="space-y-4">
-                <button className="w-full text-left p-4 bg-gray-50 dark:bg-[#1a1a1a] border-l-2 border-transparent hover:border-akatech-gold hover:bg-gray-100 dark:hover:bg-[#222] transition text-sm text-gray-600 dark:text-gray-300">
-                  + Create New Invoice
-                </button>
-                <button className="w-full text-left p-4 bg-gray-50 dark:bg-[#1a1a1a] border-l-2 border-transparent hover:border-akatech-gold hover:bg-gray-100 dark:hover:bg-[#222] transition text-sm text-gray-600 dark:text-gray-300">
-                  Update Profile Settings
-                </button>
-                <button className="w-full text-left p-4 bg-gray-50 dark:bg-[#1a1a1a] border-l-2 border-transparent hover:border-akatech-gold hover:bg-gray-100 dark:hover:bg-[#222] transition text-sm text-gray-600 dark:text-gray-300">
-                  Contact Support
-                </button>
+                {[
+                  {
+                    icon: Icons.Plus,
+                    label: "Create New Invoice",
+                    desc: "Generate and send invoices",
+                  },
+                  {
+                    icon: Icons.Settings,
+                    label: "Update Profile Settings",
+                    desc: "Manage account details",
+                  },
+                  {
+                    icon: Icons.LifeBuoy,
+                    label: "Contact Support",
+                    desc: "Get help with your project",
+                  },
+                ].map((action, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleQuickAction(action.label)}
+                    className="w-full group text-left p-4 bg-gray-50 dark:bg-[#1a1a1a] border-l-2 border-transparent hover:border-akatech-gold hover:bg-gray-100 dark:hover:bg-[#222] transition-all duration-300 flex items-center gap-4 focus:outline-none focus:ring-2 focus:ring-akatech-gold/50"
+                  >
+                    <div className="bg-white dark:bg-akatech-dark p-2 rounded-full shadow-sm group-hover:scale-110 transition-transform duration-300">
+                      <action.icon className="w-5 h-5 text-akatech-gold" />
+                    </div>
+                    <div>
+                      <span className="block text-sm font-bold text-gray-900 dark:text-white group-hover:text-akatech-gold transition-colors">
+                        {action.label}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {action.desc}
+                      </span>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
             <div className="mt-8 pt-8 border-t border-gray-200 dark:border-white/10 transition-colors duration-500">
               <div className="flex items-center gap-2 justify-center opacity-50">
-                <Logo className="w-6 h-6 grayscale" />
+                <Logo className="w-8 h-8 grayscale" />
                 <p className="text-[10px] text-gray-500 uppercase tracking-widest">
                   AkaTech System v2.4.0
                 </p>
@@ -216,6 +273,175 @@ export const Dashboard = ({ user, onLogout }) => {
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      <Modal
+        isOpen={activeModal === "invoice"}
+        onClose={() => setActiveModal(null)}
+        title="Create New Invoice"
+      >
+        <form
+          onSubmit={(e) => handleSubmit(e, "Invoice Creation")}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+              Client Name
+            </label>
+            <input
+              type="text"
+              className="w-full bg-gray-50 dark:bg-akatech-dark border border-gray-300 dark:border-white/10 p-3 rounded text-sm focus:border-akatech-gold outline-none transition-colors dark:text-white"
+              placeholder="e.g. Acme Corp"
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                Amount (GH₵)
+              </label>
+              <input
+                type="number"
+                className="w-full bg-gray-50 dark:bg-akatech-dark border border-gray-300 dark:border-white/10 p-3 rounded text-sm focus:border-akatech-gold outline-none transition-colors dark:text-white"
+                placeholder="0.00"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                Due Date
+              </label>
+              <input
+                type="date"
+                className="w-full bg-gray-50 dark:bg-akatech-dark border border-gray-300 dark:border-white/10 p-3 rounded text-sm focus:border-akatech-gold outline-none transition-colors dark:text-white"
+                required
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+              Description
+            </label>
+            <textarea
+              className="w-full bg-gray-50 dark:bg-akatech-dark border border-gray-300 dark:border-white/10 p-3 rounded text-sm focus:border-akatech-gold outline-none transition-colors dark:text-white h-24 resize-none"
+              placeholder="Invoice details..."
+              required
+            ></textarea>
+          </div>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className={`w-full bg-akatech-gold text-black font-bold uppercase tracking-widest py-3 hover:bg-white hover:text-akatech-gold border border-transparent hover:border-akatech-gold transition-colors ${
+              isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+          >
+            {isSubmitting ? "Processing..." : "Create Invoice"}
+          </button>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={activeModal === "profile"}
+        onClose={() => setActiveModal(null)}
+        title="Profile Settings"
+      >
+        <form
+          onSubmit={(e) => handleSubmit(e, "Profile Update")}
+          className="space-y-4"
+        >
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-16 h-16 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden">
+              <img
+                src={user.avatar || "https://via.placeholder.com/64"}
+                alt="Profile"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <button
+              type="button"
+              className="text-sm text-akatech-gold font-bold hover:underline"
+            >
+              Change Avatar
+            </button>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+              Full Name
+            </label>
+            <input
+              type="text"
+              defaultValue={user.name}
+              className="w-full bg-gray-50 dark:bg-akatech-dark border border-gray-300 dark:border-white/10 p-3 rounded text-sm focus:border-akatech-gold outline-none transition-colors dark:text-white"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+              Email Address
+            </label>
+            <input
+              type="email"
+              defaultValue={user.email}
+              className="w-full bg-gray-50 dark:bg-akatech-dark border border-gray-300 dark:border-white/10 p-3 rounded text-sm focus:border-akatech-gold outline-none transition-colors dark:text-white"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className={`w-full bg-akatech-gold text-black font-bold uppercase tracking-widest py-3 hover:bg-white hover:text-akatech-gold border border-transparent hover:border-akatech-gold transition-colors ${
+              isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+          >
+            {isSubmitting ? "Saving..." : "Save Changes"}
+          </button>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={activeModal === "support"}
+        onClose={() => setActiveModal(null)}
+        title="Contact Support"
+      >
+        <form
+          onSubmit={(e) => handleSubmit(e, "Support Request")}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+              Subject
+            </label>
+            <div className="relative">
+              <select className="w-full bg-gray-50 dark:bg-akatech-dark border border-gray-300 dark:border-white/10 p-3 rounded text-sm focus:border-akatech-gold outline-none transition-colors dark:text-white appearance-none">
+                <option>Technical Issue</option>
+                <option>Billing Question</option>
+                <option>Feature Request</option>
+                <option>Other</option>
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                <Icons.Menu className="w-4 h-4 text-gray-400" />
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+              Message
+            </label>
+            <textarea
+              className="w-full bg-gray-50 dark:bg-akatech-dark border border-gray-300 dark:border-white/10 p-3 rounded text-sm focus:border-akatech-gold outline-none transition-colors dark:text-white h-32 resize-none"
+              placeholder="How can we help you?"
+              required
+            ></textarea>
+          </div>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className={`w-full bg-akatech-gold text-black font-bold uppercase tracking-widest py-3 hover:bg-white hover:text-akatech-gold border border-transparent hover:border-akatech-gold transition-colors ${
+              isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+          >
+            {isSubmitting ? "Sending..." : "Send Message"}
+          </button>
+        </form>
+      </Modal>
     </div>
   );
 };

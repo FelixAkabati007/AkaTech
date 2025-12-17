@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-akatech-dark: #080808;
   --color-akatech-card: #141414;
@@ -89,11 +91,35 @@
 
 @layer components {
   /* Typography Utilities */
+  .bg-gold-gradient {
+    background-image: var(--image-gold-gradient);
+  }
+
   .text-gradient-gold {
     @apply text-transparent bg-gradient-to-r from-akatech-goldDark via-akatech-gold to-akatech-goldDark 
            dark:from-akatech-goldLight dark:via-akatech-gold dark:to-akatech-goldLight animate-shine bg-[length:200%_auto];
     background-clip: text;
     -webkit-background-clip: text;
+  }
+
+  .gold-text-clip {
+    @apply font-serif italic text-transparent bg-clip-text animate-shine bg-[length:200%_auto] relative inline-block;
+    background-image: linear-gradient(
+      135deg,
+      #FFD700 0%,
+      #8B6914 25%,
+      #FFF8DC 50%,
+      #8B6914 75%,
+      #FFD700 100%
+    );
+    filter: drop-shadow(0px 2px 4px rgba(139, 105, 20, 0.3));
+    
+    /* Hover state for interactivity */
+    &:hover {
+      filter: drop-shadow(0px 4px 8px rgba(139, 105, 20, 0.5));
+      transform: scale(1.02);
+      transition: all 0.3s ease;
+    }
   }
 
   /* Card Styles */

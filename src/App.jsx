@@ -30,11 +30,17 @@ export default function App() {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const { mode, cycleTheme } = useTheme();
 
-  const handleLogin = (email) => {
+  const handleLogin = (email, password) => {
+    // Check for specific admin credentials or legacy admin email pattern
+    const isAdmin = 
+      (email === "JohnDoe@gmail.com" && password === "qwerty12345") || 
+      email.includes("admin");
+
     const mockUser = {
       name: email.split("@")[0],
       email: email,
       avatar: "https://via.placeholder.com/40",
+      isAdmin: isAdmin,
     };
     setUser(mockUser);
     setAuthModalOpen(false);

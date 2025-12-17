@@ -84,7 +84,7 @@ export const Navbar = ({
           onClick={() => handleNav("landing")}
           className="flex items-center gap-4 group cursor-pointer"
         >
-          <Logo className="w-10 h-10 md:w-12 md:h-12 drop-shadow-lg transition-all duration-500 group-hover:scale-110" />
+          <Logo className="w-14 h-14 md:w-20 md:h-20 drop-shadow-lg transition-all duration-500 group-hover:scale-110" />
           <div className="flex flex-col">
             <span className="text-lg md:text-xl font-serif font-bold tracking-wide text-gray-900 dark:text-white leading-none transition-colors duration-500 group-hover:text-akatech-gold">
               AKATECH

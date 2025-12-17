@@ -64,7 +64,7 @@ export const PlanCompletion = ({ plan, onBack, onHome }) => {
               <h2 className="text-2xl font-serif font-bold text-gray-900 dark:text-white mb-2">
                 {plan.name}
               </h2>
-              <div className="flex items-baseline gap-1 mb-6 border-b border-gray-100 dark:border-white/10 pb-6">
+              <div className="flex items-baseline gap-1 mb-6 border-b border-gray-100 dark:border-white/10 pb-6 whitespace-nowrap">
                 <span className="text-sm text-akatech-gold">GH₵</span>
                 <span className="text-3xl font-bold text-gray-900 dark:text-white">
                   {plan.price}

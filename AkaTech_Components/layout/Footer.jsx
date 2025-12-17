@@ -6,7 +6,7 @@ export const Footer = ({ onNavigate }) => (
     <div className="container mx-auto px-4 grid md:grid-cols-4 gap-12">
       <div>
         <div className="flex items-center gap-2 mb-6 justify-center md:justify-start">
-          <Logo className="w-8 h-8" />
+          <Logo className="w-12 h-12" />
           <h3 className="text-xl font-serif font-bold text-gray-900 dark:text-white transition-colors duration-500">
             AKATECH
           </h3>

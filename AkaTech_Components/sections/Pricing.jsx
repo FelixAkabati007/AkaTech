@@ -29,14 +29,14 @@ export const Pricing = ({ onSelectPlan }) => (
             }`}
           >
             {pkg.recommended && (
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gold-gradient text-black text-[10px] font-bold px-6 py-1 uppercase tracking-widest shadow-lg">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gold-gradient animate-shine bg-[length:200%_auto] text-black text-[10px] font-bold px-6 py-1 uppercase tracking-widest shadow-lg">
                 Best Value
               </div>
             )}
             <h3 className="text-xl md:text-2xl font-serif mb-2 text-gray-900 dark:text-white transition-colors duration-500">
               {pkg.name}
             </h3>
-            <div className="flex items-baseline gap-1 mb-6">
+            <div className="flex items-baseline gap-1 mb-6 whitespace-nowrap">
               <span className="text-sm text-akatech-gold">GH₵</span>
               <span
                 className={`text-3xl md:text-4xl font-bold ${
