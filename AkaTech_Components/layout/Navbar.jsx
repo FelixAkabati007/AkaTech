@@ -174,19 +174,19 @@ export const Navbar = ({
             <div className="flex flex-col p-6 space-y-6">
               <button
                 onClick={() => handleNav("services")}
-                className="text-left text-gray-600 dark:text-gray-300 text-sm uppercase tracking-widest"
+                className="text-left text-gray-600 dark:text-gray-300 text-sm uppercase tracking-widest py-2"
               >
                 Services
               </button>
               <button
                 onClick={() => handleNav("portfolio")}
-                className="text-left text-gray-600 dark:text-gray-300 text-sm uppercase tracking-widest"
+                className="text-left text-gray-600 dark:text-gray-300 text-sm uppercase tracking-widest py-2"
               >
                 Portfolio
               </button>
               <button
                 onClick={() => handleNav("pricing")}
-                className="text-left text-gray-600 dark:text-gray-300 text-sm uppercase tracking-widest"
+                className="text-left text-gray-600 dark:text-gray-300 text-sm uppercase tracking-widest py-2"
               >
                 Pricing
               </button>

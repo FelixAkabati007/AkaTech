@@ -15,7 +15,7 @@ export const Portfolio = () => {
         >
           <div className="w-32 h-32 md:w-48 md:h-48 shrink-0 rounded-full overflow-hidden border-4 border-akatech-gold/20 relative">
             <img
-              src="Gemini_Generated_Image_2fvol02fvol02fvo.jpg"
+              src="/felix-akabati.webp"
               alt="Felix Akabati"
               className="w-full h-full object-cover"
             />

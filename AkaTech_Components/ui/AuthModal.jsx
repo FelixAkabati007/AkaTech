@@ -100,7 +100,7 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onSignup }) => {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3 }}
-            className="bg-white dark:bg-akatech-card border border-gray-200 dark:border-akatech-gold/30 w-full max-w-md p-10 relative shadow-2xl dark:shadow-[0_0_50px_rgba(0,0,0,0.8)] max-h-[90vh] overflow-y-auto no-scrollbar"
+            className="w-full max-w-md p-10 relative max-h-[90vh] overflow-y-auto no-scrollbar bg-gradient-to-br from-white via-[#fffbf2] to-[#f5ebd6] dark:from-akatech-card dark:via-[#1c1c1c] dark:to-[#2c2414] border border-akatech-gold/30 dark:border-akatech-gold/50 shadow-[0_20px_50px_-12px_rgba(197,160,89,0.3)] dark:shadow-[0_0_60px_-15px_rgba(197,160,89,0.25)] transition-all duration-500 hover:shadow-[0_25px_60px_-12px_rgba(197,160,89,0.4)] dark:hover:shadow-[0_0_70px_-10px_rgba(197,160,89,0.35)]"
             ref={modalRef}
           >
             <button

@@ -32,12 +32,7 @@ export const ComponentsPage = () => {
                   mode={"light"}
                   cycleTheme={() => {}}
                   onViewChange={() => {}}
-                  logo={
-                    <Logo
-                      src="Gemini_Generated_Image_2fvol02fvol02fvo.jpg"
-                      className="w-8 h-8"
-                    />
-                  }
+                  logo={<Logo src="/felix-akabati.webp" className="w-8 h-8" />}
                   icons={{
                     Sun: (p) => <Icons.Sun {...p} />,
                     Moon: (p) => <Icons.Moon {...p} />,
@@ -74,10 +69,7 @@ export const ComponentsPage = () => {
             </h3>
             <LazyPreview>
               <div className="flex items-center justify-center h-28 rounded-lg border border-gray-200 dark:border-white/10">
-                <Logo
-                  src="Gemini_Generated_Image_2fvol02fvol02fvo.jpg"
-                  className="w-20 h-20"
-                />
+                <Logo src="/felix-akabati.webp" className="w-20 h-20" />
               </div>
             </LazyPreview>
             <pre className="mt-4 text-[11px] bg-black/80 text-white p-3 rounded overflow-auto">
