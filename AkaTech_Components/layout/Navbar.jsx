@@ -87,7 +87,13 @@ export const Navbar = ({
         >
           <Logo className="w-10 h-10 md:w-16 md:h-16 drop-shadow-[0_0_10px_rgba(197,160,89,0.3)] group-hover:drop-shadow-[0_0_15px_rgba(197,160,89,0.5)] transition-all duration-500" />
           <div className="hidden md:flex flex-col">
-            <span className="text-lg md:text-xl font-serif font-bold tracking-wide text-gray-900 dark:text-white leading-none transition-colors duration-500 group-hover:text-akatech-gold whitespace-nowrap">
+            <span
+              className={`text-lg md:text-xl font-serif font-bold tracking-wide leading-none transition-colors duration-500 group-hover:text-akatech-gold whitespace-nowrap ${
+                isScrolled
+                  ? "text-gray-900 dark:text-white"
+                  : "text-gray-900 dark:text-gray-900"
+              }`}
+            >
               AKATECH
             </span>
             <span className="text-[9px] md:text-[10px] tracking-[0.3em] text-akatech-gold font-bold uppercase mt-1 whitespace-nowrap">
