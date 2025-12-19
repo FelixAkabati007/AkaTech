@@ -14,6 +14,7 @@ import { FloatingAssistant } from "@components/ui/FloatingAssistant";
 import { CookieConsent } from "@components/ui/CookieConsent";
 import AdinkraBackground from "@components/ui/AdinkraBackground";
 import { useTheme } from "./hooks/useTheme";
+import { Analytics } from "@vercel/analytics/react";
 
 // Lazy load pages
 const Dashboard = lazy(() =>
@@ -110,101 +111,98 @@ export default function App() {
   };
 
   return (
-    <ToastProvider>
-      <div className="font-sans antialiased relative">
-        {/* Global Background Decoration */}
-        <img
-          src="/background-accent.jpg"
-          alt=""
-          aria-hidden="true"
-          className="fixed bottom-0 left-0 w-[150px] md:w-[250px] lg:w-[350px] opacity-50 z-[5] pointer-events-none transition-all duration-500 ease-in-out mix-blend-multiply dark:mix-blend-screen select-none"
-        />
-        {view === "landing" && <ScrollProgress />}
-        {view !== "dashboard" && (
-          <Navbar
-            toggleAuth={() =>
-              view === "dashboard"
-                ? setView("landing")
-                : user
-                ? setView("dashboard")
-                : setAuthModalOpen(true)
-            }
-            isLoggedIn={!!user}
-            user={user}
-            mode={mode}
-            cycleTheme={cycleTheme}
-            onViewChange={handleNavigate}
-          />
-        )}
-        {view === "landing" && (
-          <>
-            <Hero />
-            <Services />
-            <Recommendations />
-            <Pricing onSelectPlan={handleSelectPlan} />
-            <Contact />
-          </>
-        )}
-        <Suspense
-          fallback={
-            <div className="min-h-screen flex items-center justify-center bg-white dark:bg-akatech-dark">
-              <div className="w-12 h-12 border-4 border-akatech-gold border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          }
-        >
-          {view === "dashboard" && user && (
-            <Dashboard
+    <div className={`min-h-screen ${mode} transition-colors duration-300`}>
+      <Analytics />
+      <ToastProvider>
+        <div className="bg-white dark:bg-akatech-black text-gray-900 dark:text-white min-h-screen transition-colors duration-300">
+          <AdinkraBackground />
+          {view === "landing" && <ScrollProgress />}
+          {view !== "dashboard" && (
+            <Navbar
+              toggleAuth={() =>
+                view === "dashboard"
+                  ? setView("landing")
+                  : user
+                  ? setView("dashboard")
+                  : setAuthModalOpen(true)
+              }
+              isLoggedIn={!!user}
               user={user}
-              onLogout={handleLogout}
-              onUserUpdate={handleUserUpdate}
+              mode={mode}
+              cycleTheme={cycleTheme}
+              onViewChange={handleNavigate}
             />
           )}
-
-          {view === "portfolio" && <Portfolio />}
-          {view === "components" && <ComponentsPage />}
-          {view === "docs" && <DocsPage />}
-          {view === "themes" && (
-            <ThemesPage mode={mode} cycleTheme={cycleTheme} />
+          {view === "landing" && (
+            <>
+              <Hero />
+              <Services />
+              <Recommendations />
+              <Pricing onSelectPlan={handleSelectPlan} />
+              <Contact />
+            </>
           )}
-          {view === "performance" && <PerformancePage />}
+          <Suspense
+            fallback={
+              <div className="min-h-screen flex items-center justify-center bg-white dark:bg-akatech-dark">
+                <div className="w-12 h-12 border-4 border-akatech-gold border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            }
+          >
+            {view === "dashboard" && user && (
+              <Dashboard
+                user={user}
+                onLogout={handleLogout}
+                onUserUpdate={handleUserUpdate}
+              />
+            )}
 
-          {view === "careers" && (
-            <Careers onHome={() => handleNavigate("landing")} />
-          )}
+            {view === "portfolio" && <Portfolio />}
+            {view === "components" && <ComponentsPage />}
+            {view === "docs" && <DocsPage />}
+            {view === "themes" && (
+              <ThemesPage mode={mode} cycleTheme={cycleTheme} />
+            )}
+            {view === "performance" && <PerformancePage />}
 
-          {view === "privacy" && (
-            <PrivacyPolicy onHome={() => handleNavigate("landing")} />
-          )}
+            {view === "careers" && (
+              <Careers onHome={() => handleNavigate("landing")} />
+            )}
 
-          {view === "cookie" && (
-            <CookiePolicy onHome={() => handleNavigate("landing")} />
-          )}
+            {view === "privacy" && (
+              <PrivacyPolicy onHome={() => handleNavigate("landing")} />
+            )}
 
-          {view === "terms" && (
-            <TermsOfService onHome={() => handleNavigate("landing")} />
-          )}
+            {view === "cookie" && (
+              <CookiePolicy onHome={() => handleNavigate("landing")} />
+            )}
 
-          {view === "plan-completion" && selectedPlan && (
-            <PlanCompletion
-              plan={selectedPlan}
-              onBack={() => handleNavigate("landing")}
-              onHome={() => handleNavigate("landing")}
-            />
-          )}
-        </Suspense>
-        <Footer onNavigate={handleNavigate} />
-        {view === "landing" && (
-          <Suspense fallback={null}>
-            <FloatingAssistant />
+            {view === "terms" && (
+              <TermsOfService onHome={() => handleNavigate("landing")} />
+            )}
+
+            {view === "plan-completion" && selectedPlan && (
+              <PlanCompletion
+                plan={selectedPlan}
+                onBack={() => handleNavigate("landing")}
+                onHome={() => handleNavigate("landing")}
+              />
+            )}
           </Suspense>
-        )}
-        <CookieConsent />
-        <AuthModal
-          isOpen={authModalOpen}
-          onClose={() => setAuthModalOpen(false)}
-          onLogin={handleLogin}
-        />
-      </div>
-    </ToastProvider>
+          <Footer onNavigate={handleNavigate} />
+          {view === "landing" && (
+            <Suspense fallback={null}>
+              <FloatingAssistant />
+            </Suspense>
+          )}
+          <CookieConsent />
+          <AuthModal
+            isOpen={authModalOpen}
+            onClose={() => setAuthModalOpen(false)}
+            onLogin={handleLogin}
+          />
+        </div>
+      </ToastProvider>
+    </div>
   );
 }

@@ -8,6 +8,16 @@ const Spline = React.lazy(() => import("@splinetool/react-spline"));
 export const FloatingAssistant = () => {
   const [isHovered, setIsHovered] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  React.useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   const handleClick = () => {
     window.open(
@@ -64,7 +74,7 @@ export const FloatingAssistant = () => {
         <div className="absolute inset-0 bg-gradient-to-tr from-akatech-gold/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 
         {/* Spline Viewer */}
-        {hasError ? (
+        {hasError || isMobile ? (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-akatech-gold/10 to-akatech-gold/30 dark:from-akatech-gold/20 dark:to-akatech-gold/5 text-akatech-gold">
             <Icons.Bot size={32} />
           </div>
