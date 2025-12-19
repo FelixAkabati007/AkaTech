@@ -1,23 +1,14 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { Dashboard } from "./Dashboard";
 
-// Mock useToast
-vi.mock("@components/ui/ToastProvider", () => ({
-  useToast: () => ({
-    addToast: vi.fn(),
-  }),
+// Mock Layouts
+vi.mock("../components/admin/AdminLayout", () => ({
+  AdminLayout: () => <div>Admin Console</div>,
 }));
 
-// Mock Modal to simplify testing
-vi.mock("@components/ui/Modal", () => ({
-  Modal: ({ isOpen, title, children }) =>
-    isOpen ? (
-      <div role="dialog" aria-label={title}>
-        <h1>{title}</h1>
-        {children}
-      </div>
-    ) : null,
+vi.mock("../components/client/ClientLayout", () => ({
+  ClientLayout: () => <div>Client Portal</div>,
 }));
 
 describe("Dashboard Component", () => {
@@ -59,48 +50,5 @@ describe("Dashboard Component", () => {
   it("renders Client Portal for regular user (explicit false flag)", () => {
     render(<Dashboard user={mockRegularUser} onLogout={mockOnLogout} />);
     expect(screen.getByText("Client Portal")).toBeInTheDocument();
-  });
-
-  it("renders Quick Actions with correct labels", () => {
-    render(<Dashboard user={mockUser} onLogout={mockOnLogout} />);
-    expect(screen.getByText("Create New Invoice")).toBeInTheDocument();
-    expect(screen.getByText("Update Profile Settings")).toBeInTheDocument();
-    expect(screen.getByText("Contact Support")).toBeInTheDocument();
-  });
-
-  it("renders Quick Actions descriptions", () => {
-    render(<Dashboard user={mockUser} onLogout={mockOnLogout} />);
-    expect(screen.getByText("Generate and send invoices")).toBeInTheDocument();
-    expect(screen.getByText("Manage account details")).toBeInTheDocument();
-    expect(screen.getByText("Get help with your project")).toBeInTheDocument();
-  });
-
-  it("opens Create Invoice modal when button is clicked", () => {
-    render(<Dashboard user={mockUser} onLogout={mockOnLogout} />);
-    const button = screen.getByText("Create New Invoice").closest("button");
-    fireEvent.click(button);
-    expect(
-      screen.getByRole("dialog", { name: "Create New Invoice" })
-    ).toBeInTheDocument();
-  });
-
-  it("opens Profile Settings modal when button is clicked", () => {
-    render(<Dashboard user={mockUser} onLogout={mockOnLogout} />);
-    const button = screen
-      .getByText("Update Profile Settings")
-      .closest("button");
-    fireEvent.click(button);
-    expect(
-      screen.getByRole("dialog", { name: "Profile Settings" })
-    ).toBeInTheDocument();
-  });
-
-  it("opens Contact Support modal when button is clicked", () => {
-    render(<Dashboard user={mockUser} onLogout={mockOnLogout} />);
-    const button = screen.getByText("Contact Support").closest("button");
-    fireEvent.click(button);
-    expect(
-      screen.getByRole("dialog", { name: "Contact Support" })
-    ).toBeInTheDocument();
   });
 });

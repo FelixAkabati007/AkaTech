@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { FloatingAssistant } from "./FloatingAssistant";
 
@@ -12,13 +12,22 @@ vi.mock("framer-motion", () => ({
 }));
 
 // Mock Icons
-vi.mock("./Icons", () => ({
+vi.mock("@components/ui/Icons", () => ({
   Icons: {
     Bot: (props) => <div data-testid="icon-bot" {...props} />,
-    // Mock other used icons if necessary, but component only uses Bot in fallback
-    // The component also uses specific icons in the real implementation?
-    // No, Icons is only used in fallback now.
   },
+}));
+
+// Mock Spline
+vi.mock("@splinetool/react-spline", () => ({
+  default: ({ onError, ...props }) => (
+    <div data-testid="spline-component">
+      Spline Mock
+      <button onClick={onError} data-testid="trigger-error">
+        Trigger Error
+      </button>
+    </div>
+  ),
 }));
 
 describe("FloatingAssistant Component", () => {
@@ -65,20 +74,21 @@ describe("FloatingAssistant Component", () => {
     expect(screen.queryByText("Chat with us")).not.toBeInTheDocument();
   });
 
-  it("shows fallback icon when spline viewer fails", () => {
-    const { container } = render(<FloatingAssistant />);
-    const viewer = container.querySelector("spline-viewer");
+  it("shows fallback icon when spline viewer fails", async () => {
+    render(<FloatingAssistant />);
 
     // Verify viewer is present initially
+    const viewer = await screen.findByTestId("spline-component");
     expect(viewer).toBeInTheDocument();
 
     // Trigger error event
-    fireEvent(viewer, new Event("error"));
+    const triggerBtn = screen.getByTestId("trigger-error");
+    fireEvent.click(triggerBtn);
 
     // Check if fallback icon is present
-    expect(screen.getByTestId("icon-bot")).toBeInTheDocument();
+    expect(await screen.findByTestId("icon-bot")).toBeInTheDocument();
 
     // Verify viewer is removed
-    expect(container.querySelector("spline-viewer")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("spline-component")).not.toBeInTheDocument();
   });
 });

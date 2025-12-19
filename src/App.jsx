@@ -11,6 +11,7 @@ import { Contact } from "@components/sections/Contact";
 import { Footer } from "@components/layout/Footer";
 import { AuthModal } from "@components/ui/AuthModal";
 import { FloatingAssistant } from "@components/ui/FloatingAssistant";
+import AdinkraBackground from "@components/ui/AdinkraBackground";
 import { useTheme } from "./hooks/useTheme";
 
 // Lazy load pages
@@ -78,12 +79,16 @@ export default function App() {
     const mockUser = {
       name: email.split("@")[0],
       email: email,
-      avatar: "https://via.placeholder.com/40",
+      avatarUrl: "https://via.placeholder.com/40",
       isAdmin: isAdmin,
     };
     setUser(mockUser);
     setAuthModalOpen(false);
     setView("dashboard");
+  };
+
+  const handleUserUpdate = (updatedUser) => {
+    setUser(updatedUser);
   };
 
   const handleLogout = () => {
@@ -114,20 +119,22 @@ export default function App() {
           className="fixed bottom-0 left-0 w-[150px] md:w-[250px] lg:w-[350px] opacity-50 z-[5] pointer-events-none transition-all duration-500 ease-in-out mix-blend-multiply dark:mix-blend-screen select-none"
         />
         {view === "landing" && <ScrollProgress />}
-        <Navbar
-          toggleAuth={() =>
-            view === "dashboard"
-              ? setView("landing")
-              : user
-              ? setView("dashboard")
-              : setAuthModalOpen(true)
-          }
-          isLoggedIn={!!user}
-          user={user}
-          mode={mode}
-          cycleTheme={cycleTheme}
-          onViewChange={handleNavigate}
-        />
+        {view !== "dashboard" && (
+          <Navbar
+            toggleAuth={() =>
+              view === "dashboard"
+                ? setView("landing")
+                : user
+                ? setView("dashboard")
+                : setAuthModalOpen(true)
+            }
+            isLoggedIn={!!user}
+            user={user}
+            mode={mode}
+            cycleTheme={cycleTheme}
+            onViewChange={handleNavigate}
+          />
+        )}
         {view === "landing" && (
           <>
             <Hero />
@@ -145,7 +152,11 @@ export default function App() {
           }
         >
           {view === "dashboard" && user && (
-            <Dashboard user={user} onLogout={handleLogout} />
+            <Dashboard
+              user={user}
+              onLogout={handleLogout}
+              onUserUpdate={handleUserUpdate}
+            />
           )}
 
           {view === "portfolio" && <Portfolio />}

@@ -1,43 +1,13 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icons } from "@components/ui/Icons";
+
+// Lazy load Spline to avoid heavy initial load
+const Spline = React.lazy(() => import("@splinetool/react-spline"));
 
 export const FloatingAssistant = () => {
   const [isHovered, setIsHovered] = useState(false);
   const [hasError, setHasError] = useState(false);
-  const viewerRef = useRef(null);
-
-  useEffect(() => {
-    const viewer = viewerRef.current;
-
-    const hideLogo = () => {
-      if (viewer && viewer.shadowRoot) {
-        const style = document.createElement("style");
-        style.textContent = "#logo { display: none !important; }";
-        viewer.shadowRoot.appendChild(style);
-      }
-    };
-
-    const handleError = () => {
-      setHasError(true);
-    };
-
-    if (viewer) {
-      // Attempt to hide immediately
-      hideLogo();
-      // Also listen for the load event to ensure it's hidden after content loads
-      viewer.addEventListener("load", hideLogo);
-      viewer.addEventListener("error", handleError);
-      // Listen for custom spline events if any, but generic error should catch fetch failures
-    }
-
-    return () => {
-      if (viewer) {
-        viewer.removeEventListener("load", hideLogo);
-        viewer.removeEventListener("error", handleError);
-      }
-    };
-  }, []);
 
   const handleClick = () => {
     window.open(
@@ -74,6 +44,7 @@ export const FloatingAssistant = () => {
             "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
             "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
             "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+            "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
           ],
         }}
         transition={{
@@ -98,12 +69,19 @@ export const FloatingAssistant = () => {
             <Icons.Bot size={32} />
           </div>
         ) : (
-          <spline-viewer
-            ref={viewerRef}
-            url="https://prod.spline.design/gg8wAlCUGNYmIMlR/scene.splinecode"
-            loading-anim-type="spinner-small-dark"
-            class="w-full h-full transform scale-125 translate-y-2"
-          ></spline-viewer>
+          <Suspense
+            fallback={
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="w-6 h-6 border-2 border-akatech-gold border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            }
+          >
+            <Spline
+              scene="https://prod.spline.design/gg8wAlCUGNYmIMlR/scene.splinecode"
+              className="w-full h-full transform scale-125 translate-y-2"
+              onError={() => setHasError(true)}
+            />
+          </Suspense>
         )}
 
         {/* Unread Badge */}
