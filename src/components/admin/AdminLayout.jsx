@@ -4,6 +4,7 @@ import { Icons } from "@components/ui/Icons";
 import { Logo } from "@components/ui/Logo";
 
 import { AdminDashboard } from "./AdminDashboard";
+import { AdminMessages } from "./AdminMessages";
 import { AdminClients } from "./AdminClients";
 import { AdminProjects } from "./AdminProjects";
 import { AdminBilling } from "./AdminBilling";
@@ -19,6 +20,7 @@ export const AdminLayout = ({ user, onLogout }) => {
 
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: Icons.LayoutDashboard },
+    { id: "messages", label: "Messages", icon: Icons.MessageSquare },
     { id: "clients", label: "Clients", icon: Icons.Users },
     { id: "projects", label: "Projects", icon: Icons.Briefcase },
     { id: "billing", label: "Billing", icon: Icons.CreditCard },
@@ -30,6 +32,8 @@ export const AdminLayout = ({ user, onLogout }) => {
     switch (activeTab) {
       case "dashboard":
         return <AdminDashboard user={user} />;
+      case "messages":
+        return <AdminMessages />;
       case "clients":
         return <AdminClients />;
       case "projects":

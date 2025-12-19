@@ -47,6 +47,7 @@ import {
   Search,
   Upload,
   Send,
+  Loader,
 } from "lucide-react";
 
 export const Icons = {
@@ -99,6 +100,7 @@ export const Icons = {
   Search,
   Upload,
   Send,
+  Loader,
   Google: (props) => (
     <svg
       {...props}

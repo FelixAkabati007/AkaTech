@@ -3,7 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-akatech-dark: #080808;
+  --color-akatech-dark: #121212;
   --color-akatech-card: #141414;
   --color-akatech-gold: #c5a059;
   --color-akatech-goldLight: #eedc9a;

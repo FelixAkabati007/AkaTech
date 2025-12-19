@@ -6,6 +6,9 @@ import { AdminLayout } from "./AdminLayout";
 vi.mock("./AdminDashboard", () => ({
   AdminDashboard: () => <div>Dashboard Component</div>,
 }));
+vi.mock("./AdminMessages", () => ({
+  AdminMessages: () => <div>Messages Component</div>,
+}));
 vi.mock("./AdminClients", () => ({
   AdminClients: () => <div>Clients Component</div>,
 }));
@@ -29,6 +32,7 @@ vi.mock("./AdminProfile", () => ({
 vi.mock("@components/ui/Icons", () => ({
   Icons: {
     LayoutDashboard: () => <span>DashboardIcon</span>,
+    MessageSquare: () => <span>MessageSquareIcon</span>,
     Users: () => <span>UsersIcon</span>,
     Briefcase: () => <span>BriefcaseIcon</span>,
     CreditCard: () => <span>CreditCardIcon</span>,

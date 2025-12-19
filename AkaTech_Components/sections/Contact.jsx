@@ -5,11 +5,77 @@ import { useToast } from "../ui/ToastProvider";
 export const Contact = () => {
   const { addToast } = useToast();
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    subject: "",
+    message: "",
+  });
+  const [errors, setErrors] = useState({});
 
-  const handleSubmit = (e) => {
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    if (errors[e.target.name]) {
+      setErrors({ ...errors, [e.target.name]: null });
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    if (!formData.name.trim()) newErrors.name = "Name is required";
+    if (!formData.email.trim()) newErrors.email = "Email is required";
+    else if (!/\S+@\S+\.\S+/.test(formData.email))
+      newErrors.email = "Email is invalid";
+    if (!formData.subject.trim()) newErrors.subject = "Subject is required";
+    if (!formData.message.trim()) newErrors.message = "Message is required";
+    else if (formData.message.length > 1000)
+      newErrors.message = "Message must be less than 1000 characters";
+
+    // Simple client-side profanity check
+    const badWords = ["spam", "junk", "badword"];
+    if (
+      badWords.some((word) => formData.message.toLowerCase().includes(word))
+    ) {
+      newErrors.message = "Message contains inappropriate content";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitted(true);
-    addToast("Message sent successfully!", "success");
+    if (!validateForm()) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch(
+        "http://localhost:3001/api/client-messages",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(formData),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Something went wrong");
+      }
+
+      setSubmitted(true);
+      addToast("Message sent successfully!", "success");
+      setFormData({ name: "", email: "", subject: "", message: "" });
+    } catch (error) {
+      addToast(error.message, "error");
+      setErrors({ submit: error.message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -80,42 +146,94 @@ export const Contact = () => {
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-6" noValidate>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    autoComplete="name"
+                    placeholder="NAME"
+                    className={`bg-gray-50 dark:bg-akatech-dark w-full p-4 text-base text-gray-900 dark:text-white border-b ${
+                      errors.name
+                        ? "border-red-500"
+                        : "border-gray-300 dark:border-white/20"
+                    } focus:border-akatech-gold outline-none placeholder-gray-500 dark:placeholder-gray-600 transition-colors`}
+                    required
+                  />
+                  {errors.name && (
+                    <p className="text-red-500 text-xs mt-1">{errors.name}</p>
+                  )}
+                </div>
+                <div>
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    autoComplete="email"
+                    placeholder="EMAIL"
+                    className={`bg-gray-50 dark:bg-akatech-dark w-full p-4 text-base text-gray-900 dark:text-white border-b ${
+                      errors.email
+                        ? "border-red-500"
+                        : "border-gray-300 dark:border-white/20"
+                    } focus:border-akatech-gold outline-none placeholder-gray-500 dark:placeholder-gray-600 transition-colors`}
+                    required
+                  />
+                  {errors.email && (
+                    <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+                  )}
+                </div>
+              </div>
+              <div>
                 <input
                   type="text"
-                  name="name"
-                  autoComplete="name"
-                  placeholder="NAME"
-                  className="bg-gray-50 dark:bg-akatech-dark w-full p-4 text-base text-gray-900 dark:text-white border-b border-gray-300 dark:border-white/20 focus:border-akatech-gold outline-none placeholder-gray-500 dark:placeholder-gray-600 transition-colors"
+                  name="subject"
+                  value={formData.subject}
+                  onChange={handleChange}
+                  placeholder="SUBJECT"
+                  className={`bg-gray-50 dark:bg-akatech-dark w-full p-4 text-base text-gray-900 dark:text-white border-b ${
+                    errors.subject
+                      ? "border-red-500"
+                      : "border-gray-300 dark:border-white/20"
+                  } focus:border-akatech-gold outline-none placeholder-gray-500 dark:placeholder-gray-600 transition-colors`}
                   required
                 />
-                <input
-                  type="email"
-                  name="email"
-                  autoComplete="email"
-                  placeholder="EMAIL"
-                  className="bg-gray-50 dark:bg-akatech-dark w-full p-4 text-base text-gray-900 dark:text-white border-b border-gray-300 dark:border-white/20 focus:border-akatech-gold outline-none placeholder-gray-500 dark:placeholder-gray-600 transition-colors"
-                  required
-                />
+                {errors.subject && (
+                  <p className="text-red-500 text-xs mt-1">{errors.subject}</p>
+                )}
               </div>
-              <input
-                type="text"
-                name="subject"
-                placeholder="SUBJECT"
-                className="bg-gray-50 dark:bg-akatech-dark w-full p-4 text-base text-gray-900 dark:text-white border-b border-gray-300 dark:border-white/20 focus:border-akatech-gold outline-none placeholder-gray-500 dark:placeholder-gray-600 transition-colors"
-                required
-              />
-              <textarea
-                rows="4"
-                name="message"
-                placeholder="MESSAGE"
-                className="bg-gray-50 dark:bg-akatech-dark w-full p-4 text-base text-gray-900 dark:text-white border-b border-gray-300 dark:border-white/20 focus:border-akatech-gold outline-none placeholder-gray-500 dark:placeholder-gray-600 transition-colors resize-none"
-                required
-              ></textarea>
-              <button className="bg-gray-900 dark:bg-white text-white dark:text-black font-bold uppercase tracking-[0.2em] text-xs px-10 py-4 w-full hover:bg-gold-gradient hover:text-black transition-all duration-300 min-h-[48px]">
-                Send Message
+              <div>
+                <textarea
+                  rows="4"
+                  name="message"
+                  value={formData.message}
+                  onChange={handleChange}
+                  placeholder="MESSAGE"
+                  className={`bg-gray-50 dark:bg-akatech-dark w-full p-4 text-base text-gray-900 dark:text-white border-b ${
+                    errors.message
+                      ? "border-red-500"
+                      : "border-gray-300 dark:border-white/20"
+                  } focus:border-akatech-gold outline-none placeholder-gray-500 dark:placeholder-gray-600 transition-colors resize-none`}
+                  required
+                ></textarea>
+                {errors.message && (
+                  <p className="text-red-500 text-xs mt-1">{errors.message}</p>
+                )}
+              </div>
+              <button
+                disabled={loading}
+                className="bg-gray-900 dark:bg-white text-white dark:text-black font-bold uppercase tracking-[0.2em] text-xs px-10 py-4 w-full hover:bg-gold-gradient hover:text-black transition-all duration-300 min-h-[48px] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? "Sending..." : "Send Message"}
               </button>
+              {errors.submit && (
+                <p className="text-red-500 text-center text-sm">
+                  {errors.submit}
+                </p>
+              )}
             </form>
           )}
         </div>
