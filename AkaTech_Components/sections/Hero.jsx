@@ -48,9 +48,11 @@ export const Hero = () => {
             <span className="gold-text-clip">Excellence</span>
           </h1>
           <p className="text-gray-600 dark:text-gray-400 text-base sm:text-lg mb-10 max-w-lg font-light leading-relaxed border-l-2 border-akatech-gold/30 pl-6 transition-colors duration-300">
-            AkaTech IT Solutions engineers premium software architectures,
-            blending elegance with high-performance computing for visionary
-            businesses.
+            <strong className="font-bold text-gray-900 dark:text-white">
+              AkaTech IT Solutions
+            </strong>{" "}
+            engineers premium software architectures, blending elegance with
+            high-performance computing for visionary businesses.
           </p>
           <div className="flex flex-wrap gap-4">
             <a href="#pricing" className="btn-primary">
