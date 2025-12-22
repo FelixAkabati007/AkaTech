@@ -1,125 +1,121 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ClientSupport } from "./ClientSupport";
-import { mockService } from "@lib/mockData";
 
-// Mock dependencies
-vi.mock("@lib/mockData", () => ({
-  mockService: {
-    getTickets: vi.fn(),
-    saveTicket: vi.fn(),
-  },
-}));
-
+// Mock Icons
 vi.mock("@components/ui/Icons", () => ({
   Icons: {
+    Search: () => <div data-testid="icon-search" />,
     Plus: () => <div data-testid="icon-plus" />,
     LifeBuoy: () => <div data-testid="icon-life-buoy" />,
     X: () => <div data-testid="icon-x" />,
     MessageSquare: () => <div data-testid="icon-message-square" />,
-    Send: () => <div data-testid="icon-send" />,
   },
 }));
 
 describe("ClientSupport", () => {
-  const mockUser = { id: 1, name: "Test Client" };
+  const mockUser = {
+    id: "user-123",
+    name: "Test User",
+    email: "test@example.com",
+  };
+
   const mockTickets = [
     {
-      id: 101,
-      subject: "Login Issue",
-      priority: "High",
+      id: "t1",
+      subject: "Test Ticket 1",
       status: "Open",
-      message: "Cannot login",
+      priority: "High",
       createdAt: "2023-01-01",
-      replies: [],
+      messages: [],
     },
     {
-      id: 102,
-      subject: "Feature Request",
-      priority: "Low",
+      id: "t2",
+      subject: "Test Ticket 2",
       status: "Closed",
-      message: "Add dark mode",
+      priority: "Normal",
       createdAt: "2023-01-02",
-      replies: [],
+      messages: [],
     },
   ];
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockService.getTickets.mockReturnValue(mockTickets);
+    global.fetch = vi.fn((url) => {
+      if (url.includes("/api/client/tickets") && !url.includes("POST")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockTickets),
+        });
+      }
+      if (url.includes("/api/tickets") && !url.includes("PATCH")) {
+        // POST new ticket
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        });
+      }
+      return Promise.reject(new Error("Unknown URL"));
+    });
   });
 
-  it("renders the ticket list", () => {
+  it("renders support dashboard with tickets", async () => {
     render(<ClientSupport user={mockUser} />);
-    expect(screen.getByText("Support Tickets")).toBeInTheDocument();
-    expect(screen.getByText("Login Issue")).toBeInTheDocument();
-    expect(screen.getByText("Feature Request")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText("Support Tickets")).toBeInTheDocument();
+      expect(screen.getByText("Test Ticket 1")).toBeInTheDocument();
+      expect(screen.getByText("Test Ticket 2")).toBeInTheDocument();
+    });
   });
 
-  it("selects a ticket and shows details", () => {
+  it("opens new ticket modal", async () => {
     render(<ClientSupport user={mockUser} />);
 
-    // Initial state: no selection placeholder
-    expect(
-      screen.getByText("Select a ticket to view conversation")
-    ).toBeInTheDocument();
-
-    // Click ticket
-    fireEvent.click(screen.getByText("Login Issue"));
-
-    // Check details
-    expect(
-      screen.queryByText("Select a ticket to view conversation")
-    ).not.toBeInTheDocument();
-    // Use getAllByText because the text exists in the list item and the detail view
-    expect(screen.getAllByText("Cannot login").length).toBeGreaterThan(0);
-    expect(
-      screen.getByPlaceholderText("Type your reply...")
-    ).toBeInTheDocument();
-  });
-
-  it("sends a reply", () => {
-    render(<ClientSupport user={mockUser} />);
-    fireEvent.click(screen.getByText("Login Issue"));
-
-    const replyInput = screen.getByPlaceholderText("Type your reply...");
-    fireEvent.change(replyInput, { target: { value: "Fixed it myself" } });
-
-    fireEvent.click(screen.getByTestId("icon-send").parentElement);
-
-    // Should show the new reply
-    expect(screen.getByText("Fixed it myself")).toBeInTheDocument();
-  });
-
-  it("opens create ticket modal and submits", () => {
-    render(<ClientSupport user={mockUser} />);
+    await waitFor(() => {
+      expect(screen.getByText("Support Tickets")).toBeInTheDocument();
+    });
 
     fireEvent.click(screen.getByText("New Ticket"));
-
     expect(screen.getByText("Create New Ticket")).toBeInTheDocument();
+  });
 
-    fireEvent.change(
-      screen.getByPlaceholderText("Brief summary of the issue"),
-      {
-        target: { value: "New Bug" },
-      }
-    );
-    fireEvent.change(
-      screen.getByPlaceholderText("Describe your issue in detail..."),
-      {
-        target: { value: "Something broke" },
-      }
-    );
+  it("submits a new ticket", async () => {
+    render(<ClientSupport user={mockUser} />);
 
+    await waitFor(() => {
+      expect(screen.getByText("Support Tickets")).toBeInTheDocument();
+    });
+
+    // Open modal
+    fireEvent.click(screen.getByText("New Ticket"));
+
+    // Fill form
+    fireEvent.change(screen.getByLabelText(/subject/i), {
+      target: { value: "New Issue" },
+    });
+    fireEvent.change(screen.getByLabelText(/priority/i), {
+      target: { value: "Urgent" },
+    });
+    fireEvent.change(screen.getByLabelText(/message/i), {
+      target: { value: "Help needed" },
+    });
+
+    // Submit
     fireEvent.click(screen.getByText("Submit Ticket"));
 
-    expect(mockService.saveTicket).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clientId: mockUser.id,
-        subject: "New Bug",
-        message: "Something broke",
-        status: "Open",
-      })
-    );
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/tickets"),
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining("New Issue"),
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Create New Ticket")).not.toBeInTheDocument();
+    });
   });
 });

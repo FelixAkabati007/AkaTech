@@ -1,0 +1,286 @@
+import React, { useState, useEffect } from "react";
+import { Icons } from "@components/ui/Icons";
+
+export const AdminSubscriptions = () => {
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [notification, setNotification] = useState(null);
+
+  const fetchSubscriptions = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("adminToken");
+      const query = new URLSearchParams({ page, limit });
+      if (statusFilter) query.append("status", statusFilter);
+
+      const res = await fetch(
+        `http://localhost:3001/api/subscriptions?${query.toString()}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const data = await res.json();
+      setSubscriptions(data.data || []);
+      setTotal(data.total || 0);
+    } catch (err) {
+      console.error("Failed to fetch subscriptions", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSubscriptions();
+  }, [page, statusFilter]);
+
+  const handleAction = async (id, action, details = {}) => {
+    try {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch(
+        `http://localhost:3001/api/subscriptions/${id}/action`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ action, details }),
+        }
+      );
+
+      if (res.ok) {
+        showNotification(`Subscription ${action}d successfully`);
+        fetchSubscriptions();
+      } else {
+        showNotification("Action failed", "error");
+      }
+    } catch (err) {
+      showNotification("Error performing action", "error");
+    }
+  };
+
+  const showNotification = (message, type = "success") => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const handleExport = async () => {
+    try {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch(
+        "http://localhost:3001/api/subscriptions/export",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "subscriptions.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      showNotification("Export failed", "error");
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "active":
+        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+      case "pending":
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+      case "expired":
+        return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+      case "cancelled":
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  return (
+    <div className="p-8 space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-serif text-gray-900 dark:text-white">
+          Subscription Management
+        </h2>
+        <div className="flex gap-4">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-4 py-2 bg-white dark:bg-akatech-card border border-gray-200 dark:border-white/10 rounded-lg text-sm"
+          >
+            <option value="">All Status</option>
+            <option value="active">Active</option>
+            <option value="pending">Pending</option>
+            <option value="expired">Expired</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <button
+            onClick={handleExport}
+            className="px-4 py-2 bg-akatech-gold text-white text-sm font-bold uppercase tracking-widest hover:bg-akatech-goldDark transition-colors flex items-center gap-2 rounded"
+          >
+            <Icons.Download className="w-4 h-4" /> Export CSV
+          </button>
+        </div>
+      </div>
+
+      {notification && (
+        <div
+          className={`p-4 rounded-lg mb-4 ${
+            notification.type === "error"
+              ? "bg-red-100 text-red-800"
+              : "bg-green-100 text-green-800"
+          }`}
+        >
+          {notification.message}
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-akatech-card rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-gray-50 dark:bg-white/5 border-b border-gray-200 dark:border-white/10">
+              <tr>
+                <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
+                  User
+                </th>
+                <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
+                  Plan
+                </th>
+                <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
+                  Start Date
+                </th>
+                <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
+                  End Date
+                </th>
+                <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider text-right">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-white/5">
+              {loading ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-4 text-center">
+                    Loading...
+                  </td>
+                </tr>
+              ) : subscriptions.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-4 text-center">
+                    No subscriptions found
+                  </td>
+                </tr>
+              ) : (
+                subscriptions.map((sub) => (
+                  <tr
+                    key={sub.id}
+                    className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                  >
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-gray-900 dark:text-white">
+                        {sub.userName}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {sub.userEmail}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
+                      {sub.plan}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
+                          sub.status
+                        )}`}
+                      >
+                        {sub.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
+                      {new Date(sub.startDate).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
+                      {new Date(sub.endDate).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 text-right space-x-2">
+                      {sub.status === "pending" && (
+                        <>
+                          <button
+                            onClick={() => handleAction(sub.id, "approve")}
+                            className="text-green-600 hover:text-green-900 font-bold text-xs uppercase"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleAction(sub.id, "reject")}
+                            className="text-red-600 hover:text-red-900 font-bold text-xs uppercase"
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      {sub.status === "active" && (
+                        <>
+                          <button
+                            onClick={() =>
+                              handleAction(sub.id, "extend", { months: 1 })
+                            }
+                            className="text-blue-600 hover:text-blue-900 font-bold text-xs uppercase"
+                          >
+                            Extend
+                          </button>
+                          <button
+                            onClick={() => handleAction(sub.id, "cancel")}
+                            className="text-red-600 hover:text-red-900 font-bold text-xs uppercase"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex justify-between items-center text-sm text-gray-500">
+        <div>
+          Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of{" "}
+          {total} results
+        </div>
+        <div className="space-x-2">
+          <button
+            disabled={page === 1}
+            onClick={() => setPage((p) => p - 1)}
+            className="px-3 py-1 border rounded disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <button
+            disabled={page * limit >= total}
+            onClick={() => setPage((p) => p + 1)}
+            className="px-3 py-1 border rounded disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

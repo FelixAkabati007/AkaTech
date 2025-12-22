@@ -1,5 +1,11 @@
 import React from "react";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { FloatingAssistant } from "./FloatingAssistant";
 
@@ -66,7 +72,9 @@ describe("FloatingAssistant Device Detection", () => {
     // Use findBy because of Suspense/Lazy load
     const spline = await screen.findByTestId("spline-scene");
     expect(spline).toBeInTheDocument();
-    expect(screen.queryByTestId("bot-icon")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByTestId("bot-icon")).not.toBeInTheDocument();
+    });
   });
 
   it("renders Bot icon on mobile user agent", () => {

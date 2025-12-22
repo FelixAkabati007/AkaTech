@@ -115,7 +115,8 @@ export const CookieConsent = () => {
                         Essential Cookies
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        Required for basic site functionality. Cannot be disabled.
+                        Required for basic site functionality. Cannot be
+                        disabled.
                       </p>
                     </div>
                     <div className="w-12 h-6 bg-akatech-gold/50 rounded-full relative cursor-not-allowed opacity-70">
@@ -129,7 +130,8 @@ export const CookieConsent = () => {
                         Analytics Cookies
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        Help us understand how visitors interact with our website.
+                        Help us understand how visitors interact with our
+                        website.
                       </p>
                     </div>
                     <button

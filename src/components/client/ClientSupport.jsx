@@ -310,10 +310,14 @@ export const ClientSupport = ({ user }) => {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label
+                  htmlFor="ticket-subject"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
                   Subject
                 </label>
                 <input
+                  id="ticket-subject"
                   type="text"
                   required
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
@@ -326,10 +330,14 @@ export const ClientSupport = ({ user }) => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label
+                  htmlFor="ticket-priority"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
                   Priority
                 </label>
                 <select
+                  id="ticket-priority"
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
                   value={newTicket.priority}
                   onChange={(e) =>
@@ -338,16 +346,18 @@ export const ClientSupport = ({ user }) => {
                 >
                   <option value="Low">Low</option>
                   <option value="Normal">Normal</option>
-                  <option value="High">High</option>
                   <option value="Urgent">Urgent</option>
                 </select>
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label
+                  htmlFor="ticket-message"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
                   Message
                 </label>
                 <textarea
+                  id="ticket-message"
                   required
                   rows="4"
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none resize-none"

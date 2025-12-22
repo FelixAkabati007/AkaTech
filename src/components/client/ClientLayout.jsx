@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icons } from "@components/ui/Icons";
 import { Avatar } from "@components/ui/Avatar";
@@ -203,7 +203,15 @@ export const ClientLayout = ({ user, onLogout }) => {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2 }}
             >
-              {renderContent()}
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center h-full min-h-[400px]">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-akatech-gold"></div>
+                  </div>
+                }
+              >
+                {renderContent()}
+              </Suspense>
             </motion.div>
           </AnimatePresence>
         </div>

@@ -1,12 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icons } from "@components/ui/Icons";
 import { Logo } from "@components/ui/Logo";
 
 import { AdminDashboard } from "./AdminDashboard";
-import { AdminMessages } from "./AdminMessages";
 import { AdminClients } from "./AdminClients";
-import { AdminProjects } from "./AdminProjects";
 import { AdminBilling } from "./AdminBilling";
 import { AdminSupport } from "./AdminSupport";
 import { AdminSettings } from "./AdminSettings";
@@ -44,6 +42,7 @@ export const AdminLayout = ({ user, onLogout }) => {
     { id: "messages", label: "Messages", icon: Icons.MessageSquare },
     { id: "clients", label: "Clients", icon: Icons.Users },
     { id: "projects", label: "Projects", icon: Icons.Briefcase },
+    { id: "subscriptions", label: "Subscriptions", icon: Icons.CreditCard },
     { id: "billing", label: "Billing", icon: Icons.CreditCard },
     { id: "support", label: "Support", icon: Icons.LifeBuoy },
     { id: "settings", label: "Settings", icon: Icons.Settings },
@@ -54,11 +53,19 @@ export const AdminLayout = ({ user, onLogout }) => {
       case "dashboard":
         return <AdminDashboard user={user} />;
       case "messages":
-        return <AdminMessages />;
+        return (
+          <div className="p-8 text-center text-gray-500">
+            Messages Module Coming Soon
+          </div>
+        );
       case "clients":
         return <AdminClients />;
       case "projects":
-        return <AdminProjects />;
+        return (
+          <div className="p-8 text-center text-gray-500">
+            Projects Module Coming Soon
+          </div>
+        );
       case "billing":
         return <AdminBilling />;
       case "support":
@@ -288,7 +295,17 @@ export const AdminLayout = ({ user, onLogout }) => {
             </AnimatePresence>
           </div>
         </header>
-        <div className="p-4 md:p-8 max-w-7xl mx-auto">{renderContent()}</div>
+        <div className="p-4 md:p-8 max-w-7xl mx-auto">
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center h-full min-h-[400px]">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-akatech-gold"></div>
+              </div>
+            }
+          >
+            {renderContent()}
+          </Suspense>
+        </div>
       </main>
     </div>
   );

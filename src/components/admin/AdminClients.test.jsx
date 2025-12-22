@@ -54,26 +54,26 @@ describe("AdminClients", () => {
 
   it("opens modal in edit mode when Edit button is clicked", () => {
     render(<AdminClients />);
-    
+
     // Find edit buttons (PenToolIcon)
     const editButtons = screen.getAllByLabelText("Edit user");
     fireEvent.click(editButtons[0]); // Click edit for John Doe
 
     // Modal should open with "Edit User" title
     expect(screen.getByText("Edit User")).toBeDefined();
-    
+
     // Form fields should be pre-filled
     expect(screen.getByLabelText("Full Name").value).toBe("John Doe");
     expect(screen.getByLabelText("Email").value).toBe("john@example.com");
     expect(screen.getByLabelText("Role").value).toBe("client");
-    
+
     // Submit button should say "Update User"
     expect(screen.getByText("Update User")).toBeDefined();
   });
 
   it("calls updateUser when form is submitted in edit mode", () => {
     render(<AdminClients />);
-    
+
     // Open edit modal for first user
     const editButtons = screen.getAllByLabelText("Edit user");
     fireEvent.click(editButtons[0]);
@@ -87,12 +87,14 @@ describe("AdminClients", () => {
     fireEvent.submit(form);
 
     // Verify updateUser was called with updated data
-    expect(mockService.updateUser).toHaveBeenCalledWith(expect.objectContaining({
-      id: 1,
-      name: "John Doe Updated",
-      email: "john@example.com",
-      role: "client",
-    }));
+    expect(mockService.updateUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 1,
+        name: "John Doe Updated",
+        email: "john@example.com",
+        role: "client",
+      })
+    );
 
     // Verify modal closed (or at least list refreshed)
     expect(mockService.getUsers).toHaveBeenCalledTimes(2); // Initial render + after update
@@ -100,12 +102,14 @@ describe("AdminClients", () => {
 
   it("calls deleteUser when Delete button is clicked and confirmed", () => {
     render(<AdminClients />);
-    
+
     // Find delete buttons
     const deleteButtons = screen.getAllByLabelText("Delete user");
     fireEvent.click(deleteButtons[0]); // Delete John Doe
 
-    expect(global.confirm).toHaveBeenCalledWith("Are you sure you want to delete this user?");
+    expect(global.confirm).toHaveBeenCalledWith(
+      "Are you sure you want to delete this user?"
+    );
     expect(mockService.deleteUser).toHaveBeenCalledWith(1);
     expect(mockService.getUsers).toHaveBeenCalledTimes(2); // Initial render + after delete
   });
@@ -113,7 +117,7 @@ describe("AdminClients", () => {
   it("does not delete if confirm is cancelled", () => {
     global.confirm.mockReturnValue(false);
     render(<AdminClients />);
-    
+
     const deleteButtons = screen.getAllByLabelText("Delete user");
     fireEvent.click(deleteButtons[0]);
 

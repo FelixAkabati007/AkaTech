@@ -53,6 +53,8 @@ const getDb = () => {
   if (!db.projects) db.projects = [];
   if (!db.tickets) db.tickets = [];
   if (!db.invoices) db.invoices = [];
+  if (!db.subscriptions) db.subscriptions = [];
+  if (!db.auditLogs) db.auditLogs = [];
   return db;
 };
 
@@ -69,6 +71,20 @@ const encrypt = (text) => {
 
 const decrypt = (text) => {
   return Buffer.from(text, "base64").toString("utf8");
+};
+
+// --- Audit Log Helper ---
+const logAudit = (action, performedBy, details) => {
+  const db = getDb();
+  const log = {
+    id: crypto.randomUUID(),
+    action,
+    performedBy,
+    details,
+    timestamp: new Date().toISOString(),
+  };
+  db.auditLogs.push(log);
+  saveDb(db);
 };
 
 // --- Auth Middleware ---
@@ -321,6 +337,133 @@ app.get("/api/tickets", authenticateToken, (req, res) => {
     responses: t.responses.map((r) => ({ ...r, message: decrypt(r.message) })),
   }));
   res.json(tickets);
+});
+
+// 5. Subscription Management
+app.get("/api/subscriptions", authenticateToken, (req, res) => {
+  const { page = 1, limit = 10, status } = req.query;
+  const db = getDb();
+  let subs = db.subscriptions;
+
+  if (status) {
+    subs = subs.filter((s) => s.status === status);
+  }
+
+  // Pagination
+  const startIndex = (page - 1) * limit;
+  const endIndex = page * limit;
+  const paginatedSubs = subs.slice(startIndex, endIndex);
+
+  res.json({
+    total: subs.length,
+    page: parseInt(page),
+    limit: parseInt(limit),
+    data: paginatedSubs,
+  });
+});
+
+app.post("/api/subscriptions", authenticateToken, (req, res) => {
+  const { userId, userName, userEmail, plan, durationMonths } = req.body;
+  if (!userEmail || !plan)
+    return res.status(400).json({ error: "Missing fields" });
+
+  const db = getDb();
+  const newSub = {
+    id: crypto.randomUUID(),
+    userId: userId || crypto.randomUUID(),
+    userName: xss(userName),
+    userEmail: xss(userEmail),
+    plan: xss(plan),
+    status: "pending", // active, expired, pending, cancelled
+    startDate: new Date().toISOString(),
+    endDate: new Date(
+      new Date().setMonth(new Date().getMonth() + (durationMonths || 1))
+    ).toISOString(),
+    paymentHistory: [],
+    timestamp: new Date().toISOString(),
+  };
+
+  db.subscriptions.push(newSub);
+  saveDb(db);
+  logAudit("CREATE_SUBSCRIPTION", req.user.username, {
+    subId: newSub.id,
+    plan,
+  });
+  res.status(201).json(newSub);
+});
+
+app.patch("/api/subscriptions/:id/action", authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const { action, details } = req.body; // action: approve, reject, cancel, extend
+
+  const db = getDb();
+  const subIndex = db.subscriptions.findIndex((s) => s.id === id);
+  if (subIndex === -1)
+    return res.status(404).json({ error: "Subscription not found" });
+
+  const sub = db.subscriptions[subIndex];
+  let updated = false;
+
+  switch (action) {
+    case "approve":
+      sub.status = "active";
+      sub.startDate = new Date().toISOString();
+      updated = true;
+      break;
+    case "reject":
+      sub.status = "rejected";
+      updated = true;
+      break;
+    case "cancel":
+      sub.status = "cancelled";
+      updated = true;
+      break;
+    case "extend":
+      const months = details?.months || 1;
+      const currentEnd = new Date(sub.endDate);
+      sub.endDate = new Date(
+        currentEnd.setMonth(currentEnd.getMonth() + months)
+      ).toISOString();
+      updated = true;
+      break;
+    default:
+      return res.status(400).json({ error: "Invalid action" });
+  }
+
+  if (updated) {
+    saveDb(db);
+    logAudit(`SUBSCRIPTION_${action.toUpperCase()}`, req.user.username, {
+      subId: id,
+    });
+    res.json(sub);
+  }
+});
+
+app.get("/api/subscriptions/export", authenticateToken, (req, res) => {
+  const db = getDb();
+  // Simple CSV export
+  const fields = [
+    "id",
+    "userName",
+    "userEmail",
+    "plan",
+    "status",
+    "startDate",
+    "endDate",
+  ];
+  const csv = [
+    fields.join(","),
+    ...db.subscriptions.map((s) => fields.map((f) => s[f]).join(",")),
+  ].join("\n");
+
+  res.header("Content-Type", "text/csv");
+  res.attachment("subscriptions.csv");
+  res.send(csv);
+});
+
+app.get("/api/audit-logs", authenticateToken, (req, res) => {
+  const db = getDb();
+  res.json(db.auditLogs.reverse().slice(0, 100)); // Last 100 logs
 });
 
 // 4. Update Status (Generic)

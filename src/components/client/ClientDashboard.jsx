@@ -87,45 +87,72 @@ export const ClientDashboard = ({ user, setActiveTab }) => {
   }, [user.email]);
 
   const statCards = [
-    { label: "Active Projects", val: stats.activeProjects, icon: Icons.Code },
+    {
+      label: "Active Projects",
+      val: stats.activeProjects,
+      icon: Icons.Code,
+      id: "projects",
+    },
     {
       label: "Invoices Due",
       val: `GH₵ ${stats.invoicesDue.toFixed(2)}`,
-      icon: Icons.Activity,
+      icon: Icons.CreditCard,
+      id: "billing",
     },
-    { label: "Support Tickets", val: stats.tickets, icon: Icons.LifeBuoy },
+    {
+      label: "Support Tickets",
+      val: stats.tickets,
+      icon: Icons.LifeBuoy,
+      id: "support",
+    },
     {
       label: "System Status",
       val: stats.status,
-      icon: Icons.Server,
-      textClass: "text-green-600 dark:text-akatech-goldLight",
+      icon: Icons.Activity,
+      textClass: "text-green-500",
     },
   ];
 
   return (
     <div className="space-y-8">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statCards.map((stat, i) => (
-          <div
-            key={i}
-            className="bg-white dark:bg-akatech-card p-6 border-l-4 border-akatech-gold shadow-md dark:shadow-none hover:bg-gray-50 dark:hover:bg-[#1a1a1a] transition-all duration-300 transform hover:-translate-y-1 h-full"
-          >
-            <div className="flex justify-between items-start mb-4">
-              <span className="text-gray-500 dark:text-gray-400 text-[10px] uppercase tracking-widest font-semibold">
-                {stat.label}
-              </span>
-              <stat.icon className="text-akatech-gold w-5 h-5" />
-            </div>
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {statCards.map((stat, i) => {
+          const isClickable = !!stat.id;
+
+          return (
             <div
-              className={`text-2xl font-serif font-bold text-gray-900 dark:text-white ${
-                stat.textClass || ""
+              key={i}
+              onClick={(e) => {
+                if (isClickable) {
+                  e.preventDefault();
+                  setActiveTab(stat.id);
+                }
+              }}
+              role={isClickable ? "button" : "presentation"}
+              tabIndex={isClickable ? 0 : undefined}
+              className={`bg-white dark:bg-akatech-card p-6 border-l-4 border-akatech-gold shadow-md dark:shadow-none transition-all duration-300 transform hover:-translate-y-1 h-full ${
+                isClickable
+                  ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-[#1a1a1a]"
+                  : ""
               }`}
             >
-              {stat.val}
+              <div className="flex justify-between items-start mb-4">
+                <span className="text-gray-500 dark:text-gray-400 text-[10px] uppercase tracking-widest font-semibold">
+                  {stat.label}
+                </span>
+                <stat.icon className="text-akatech-gold w-5 h-5" />
+              </div>
+              <div
+                className={`text-2xl font-serif font-bold text-gray-900 dark:text-white ${
+                  stat.textClass || ""
+                }`}
+              >
+                {stat.val}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Main Content Area */}

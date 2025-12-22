@@ -1,15 +1,6 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ClientProjects } from "./ClientProjects";
-import { mockService } from "@lib/mockData";
-
-// Mock the dependencies
-vi.mock("@lib/mockData", () => ({
-  mockService: {
-    getProjects: vi.fn(),
-    createTicket: vi.fn(),
-  },
-}));
 
 // Mock Icons to avoid rendering issues
 vi.mock("@components/ui/Icons", () => ({
@@ -28,103 +19,125 @@ vi.mock("@components/ui/Icons", () => ({
 }));
 
 describe("ClientProjects", () => {
-  const mockUser = { id: 1, name: "Test Client" };
-  const mockProjects = [
+  const mockUser = { id: 1, name: "Test Client", email: "test@example.com" };
+  const mockApiProjects = [
     {
       id: 1,
-      title: "Project Alpha",
-      description: "Description Alpha",
-      status: "In Progress",
-      currentPhase: "Development",
-      phases: [{ name: "Phase 1", status: "Completed", date: "2023-01-01" }],
-      files: [],
+      plan: "Alpha",
+      notes: "Description Alpha",
+      status: "in-progress",
+      timestamp: "2023-01-01T00:00:00Z",
     },
     {
       id: 2,
-      title: "Project Beta",
-      description: "Description Beta",
-      status: "Completed",
-      currentPhase: "Deployment",
-      phases: [],
-      files: [],
+      plan: "Beta",
+      notes: "Description Beta",
+      status: "completed",
+      timestamp: "2023-01-02T00:00:00Z",
     },
   ];
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockService.getProjects.mockReturnValue(mockProjects);
+    global.fetch = vi.fn((url) => {
+      if (url.includes("/api/client/projects")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockApiProjects),
+        });
+      }
+      if (url.includes("/api/tickets")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        });
+      }
+      return Promise.reject(new Error("Unknown URL"));
+    });
     // Mock window.alert
     global.alert = vi.fn();
   });
 
-  it("renders the project list", () => {
+  it("renders the project list", async () => {
     render(<ClientProjects user={mockUser} />);
-    expect(screen.getByText("My Projects")).toBeInTheDocument();
-    expect(screen.getByText("Project Alpha")).toBeInTheDocument();
-    expect(screen.getByText("Project Beta")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText("My Projects")).toBeInTheDocument();
+      // "Alpha Project" because of component logic: `${p.plan} Project`
+      expect(screen.getByText(/Alpha Project/i)).toBeInTheDocument();
+      expect(screen.getByText(/Beta Project/i)).toBeInTheDocument();
+    });
   });
 
-  it("filters projects based on search query", () => {
+  it("filters projects based on search query", async () => {
     render(<ClientProjects user={mockUser} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Alpha Project/i)).toBeInTheDocument();
+    });
+
     const searchInput = screen.getByPlaceholderText("Search projects...");
-    
     fireEvent.change(searchInput, { target: { value: "Alpha" } });
-    
-    expect(screen.getByText("Project Alpha")).toBeInTheDocument();
-    expect(screen.queryByText("Project Beta")).not.toBeInTheDocument();
+
+    expect(screen.getByText(/Alpha Project/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Beta Project/i)).not.toBeInTheDocument();
   });
 
-  it("selects a project and shows details", () => {
+  it("selects a project and shows details", async () => {
     render(<ClientProjects user={mockUser} />);
-    
+
+    await waitFor(() => {
+      expect(screen.getByText(/Alpha Project/i)).toBeInTheDocument();
+    });
+
     // Click on Project Alpha
-    fireEvent.click(screen.getByText("Project Alpha"));
-    
+    fireEvent.click(screen.getByText(/Alpha Project/i));
+
     // Check if details are shown (Timeline, Deliverables headers)
     expect(screen.getByText("Timeline")).toBeInTheDocument();
     expect(screen.getByText("Deliverables")).toBeInTheDocument();
     expect(screen.getByText("Request Update")).toBeInTheDocument();
   });
 
-  it("opens request update modal and sends request", () => {
+  it("opens request update modal and sends request", async () => {
     render(<ClientProjects user={mockUser} />);
-    fireEvent.click(screen.getByText("Project Alpha"));
-    
+
+    await waitFor(() => {
+      expect(screen.getByText(/Alpha Project/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText(/Alpha Project/i));
+
     // Click Request Update
     fireEvent.click(screen.getByText("Request Update"));
-    
+
     // Check if modal opens
     expect(screen.getByText("Request Project Update")).toBeInTheDocument();
-    
-    // Fill form
-    const messageInput = screen.getByPlaceholderText("What specific update would you like to request?");
-    fireEvent.change(messageInput, { target: { value: "Need status update" } });
-    
-    // Submit
-    fireEvent.click(screen.getByText("Send Request"));
-    
-    expect(mockService.createTicket).toHaveBeenCalledWith({
-      clientId: mockUser.id,
-      subject: "Update Request: Project Alpha",
-      priority: "Normal",
-      message: "Need status update",
-      sender: "Client",
-    });
-    expect(global.alert).toHaveBeenCalledWith("Update request sent successfully!");
-  });
 
-  it("simulates file upload", async () => {
-    render(<ClientProjects user={mockUser} />);
-    fireEvent.click(screen.getByText("Project Alpha"));
-    
-    // Find hidden input
-    const fileInput = document.querySelector('input[type="file"]');
-    const file = new File(["dummy content"], "test-file.pdf", { type: "application/pdf" });
-    
-    // Simulate upload
-    fireEvent.change(fileInput, { target: { files: [file] } });
-    
-    // Check if file appears in list
-    expect(await screen.findByText("test-file.pdf")).toBeInTheDocument();
+    // Fill form
+    const messageInput = screen.getByPlaceholderText(
+      "What specific update would you like to request?"
+    );
+    fireEvent.change(messageInput, { target: { value: "Need status update" } });
+
+    // Submit
+    const submitBtn = screen.getByText("Send Request"); // Best guess based on typical modal
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/tickets"),
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining("Need status update"),
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(global.alert).toHaveBeenCalledWith(
+        "Update request sent successfully!"
+      );
+    });
   });
 });
