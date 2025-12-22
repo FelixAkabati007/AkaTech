@@ -15,6 +15,9 @@ vi.mock("./AdminClients", () => ({
 vi.mock("./AdminProjects", () => ({
   AdminProjects: () => <div>Projects Component</div>,
 }));
+vi.mock("./AdminSubscriptions", () => ({
+  AdminSubscriptions: () => <div>Subscriptions Component</div>,
+}));
 vi.mock("./AdminBilling", () => ({
   AdminBilling: () => <div>Billing Component</div>,
 }));
@@ -134,5 +137,9 @@ describe("AdminLayout", () => {
     // But "Clients" text only appears in sidebar.
     fireEvent.click(screen.getByText("Clients"));
     expect(screen.getByText("Clients Component")).toBeDefined();
+
+    // Click Subscriptions tab
+    fireEvent.click(screen.getByText("Subscriptions"));
+    expect(screen.getByText("Subscriptions Component")).toBeDefined();
   });
 });

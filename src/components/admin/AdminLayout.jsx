@@ -9,6 +9,9 @@ import { AdminBilling } from "./AdminBilling";
 import { AdminSupport } from "./AdminSupport";
 import { AdminSettings } from "./AdminSettings";
 import { AdminProfile } from "./AdminProfile";
+import { AdminProjects } from "./AdminProjects";
+import { AdminMessages } from "./AdminMessages";
+import { AdminSubscriptions } from "./AdminSubscriptions";
 
 export const AdminLayout = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -53,19 +56,13 @@ export const AdminLayout = ({ user, onLogout }) => {
       case "dashboard":
         return <AdminDashboard user={user} />;
       case "messages":
-        return (
-          <div className="p-8 text-center text-gray-500">
-            Messages Module Coming Soon
-          </div>
-        );
+        return <AdminMessages />;
       case "clients":
         return <AdminClients />;
       case "projects":
-        return (
-          <div className="p-8 text-center text-gray-500">
-            Projects Module Coming Soon
-          </div>
-        );
+        return <AdminProjects />;
+      case "subscriptions":
+        return <AdminSubscriptions />;
       case "billing":
         return <AdminBilling />;
       case "support":

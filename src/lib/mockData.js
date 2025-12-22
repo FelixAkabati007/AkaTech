@@ -204,6 +204,70 @@ export const initialSettings = {
   enforceSecureCookies: true,
 };
 
+export const initialMessages = [
+  {
+    id: 1,
+    name: "Sarah Wilson",
+    email: "sarah.w@example.com",
+    subject: "Service Inquiry",
+    message:
+      "I'm interested in your cloud migration services. Can we schedule a call?",
+    date: "2023-12-20T10:30:00",
+    read: false,
+    type: "contact",
+  },
+  {
+    id: 2,
+    name: "Michael Brown",
+    email: "m.brown@techcorp.com",
+    subject: "Partnership Opportunity",
+    message:
+      "We would like to discuss a potential partnership for our upcoming project.",
+    date: "2023-12-19T15:45:00",
+    read: true,
+    type: "contact",
+  },
+];
+
+export const initialSubscriptions = [
+  {
+    id: 1,
+    userId: 1,
+    userName: "John Doe",
+    userEmail: "client@gmail.com",
+    plan: "Enterprise Growth",
+    status: "active",
+    startDate: "2023-10-15",
+    endDate: "2024-10-15",
+    amount: "6,500",
+    billingCycle: "Annual",
+  },
+  {
+    id: 2,
+    userId: 2,
+    userName: "Jane Smith",
+    userEmail: "jane@example.com",
+    plan: "Startup Identity",
+    status: "pending",
+    startDate: "2023-11-01",
+    endDate: "2024-11-01",
+    amount: "2,500",
+    billingCycle: "Annual",
+  },
+  {
+    id: 3,
+    userId: 3,
+    userName: "Robert Johnson",
+    userEmail: "robert@techcorp.com",
+    plan: "Premium Commerce",
+    status: "expired",
+    startDate: "2022-09-01",
+    endDate: "2023-09-01",
+    amount: "12,000+",
+    billingCycle: "Annual",
+  },
+];
+
 // Simple simulation of a database service
 class MockService {
   constructor() {
@@ -219,6 +283,10 @@ class MockService {
       JSON.parse(localStorage.getItem("activities")) || initialActivities;
     this.settings =
       JSON.parse(localStorage.getItem("settings")) || initialSettings;
+    this.messages =
+      JSON.parse(localStorage.getItem("messages")) || initialMessages;
+    this.subscriptions =
+      JSON.parse(localStorage.getItem("subscriptions")) || initialSubscriptions;
   }
 
   _save(key, data) {
@@ -301,6 +369,11 @@ class MockService {
     this.projects = [...this.projects, newProject];
     this._save("projects", this.projects);
     return newProject;
+  }
+
+  deleteProject(id) {
+    this.projects = this.projects.filter((p) => p.id !== id);
+    this._save("projects", this.projects);
   }
 
   updateProject(id, updates) {
@@ -394,6 +467,45 @@ class MockService {
     this.settings = { ...this.settings, ...newSettings };
     this._save("settings", this.settings);
     return this.settings;
+  }
+
+  getMessages() {
+    return this.messages;
+  }
+
+  deleteMessage(id) {
+    this.messages = this.messages.filter((m) => m.id !== id);
+    this._save("messages", this.messages);
+  }
+
+  markMessageRead(id) {
+    this.messages = this.messages.map((m) =>
+      m.id === id ? { ...m, read: true } : m
+    );
+    this._save("messages", this.messages);
+  }
+
+  getSubscriptions() {
+    return this.subscriptions;
+  }
+
+  updateSubscriptionStatus(id, status) {
+    this.subscriptions = this.subscriptions.map((s) =>
+      s.id === id ? { ...s, status } : s
+    );
+    this._save("subscriptions", this.subscriptions);
+  }
+
+  extendSubscription(id, months) {
+    this.subscriptions = this.subscriptions.map((s) => {
+      if (s.id === id) {
+        const endDate = new Date(s.endDate);
+        endDate.setMonth(endDate.getMonth() + months);
+        return { ...s, endDate: endDate.toISOString().split("T")[0] };
+      }
+      return s;
+    });
+    this._save("subscriptions", this.subscriptions);
   }
 }
 

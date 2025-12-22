@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Icons } from "@components/ui/Icons";
+import { mockService } from "../../lib/mockData";
+import { PRICING_PACKAGES } from "../../lib/data";
 
 export const AdminSubscriptions = () => {
   const [subscriptions, setSubscriptions] = useState([]);
@@ -13,21 +15,24 @@ export const AdminSubscriptions = () => {
   const fetchSubscriptions = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("adminToken");
-      const query = new URLSearchParams({ page, limit });
-      if (statusFilter) query.append("status", statusFilter);
+      // Simulate network delay
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const res = await fetch(
-        `http://localhost:3001/api/subscriptions?${query.toString()}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      const data = await res.json();
-      setSubscriptions(data.data || []);
-      setTotal(data.total || 0);
+      let data = mockService.getSubscriptions();
+
+      if (statusFilter) {
+        data = data.filter((sub) => sub.status === statusFilter);
+      }
+
+      setTotal(data.length);
+
+      // Pagination
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      setSubscriptions(data.slice(start, end));
     } catch (err) {
       console.error("Failed to fetch subscriptions", err);
+      showNotification("Failed to fetch subscriptions", "error");
     } finally {
       setLoading(false);
     }
@@ -39,25 +44,29 @@ export const AdminSubscriptions = () => {
 
   const handleAction = async (id, action, details = {}) => {
     try {
-      const token = localStorage.getItem("adminToken");
-      const res = await fetch(
-        `http://localhost:3001/api/subscriptions/${id}/action`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ action, details }),
-        }
-      );
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
-      if (res.ok) {
-        showNotification(`Subscription ${action}d successfully`);
-        fetchSubscriptions();
-      } else {
-        showNotification("Action failed", "error");
+      if (action === "approve") {
+        mockService.updateSubscriptionStatus(id, "active");
+      } else if (action === "reject") {
+        mockService.updateSubscriptionStatus(id, "cancelled");
+      } else if (action === "cancel") {
+        mockService.updateSubscriptionStatus(id, "cancelled");
+      } else if (action === "extend") {
+        mockService.extendSubscription(id, details.months || 1);
       }
+
+      const actionPastTense =
+        {
+          approve: "approved",
+          reject: "rejected",
+          cancel: "cancelled",
+          extend: "extended",
+        }[action] || `${action}d`;
+
+      showNotification(`Subscription ${actionPastTense} successfully`);
+      fetchSubscriptions();
     } catch (err) {
       showNotification("Error performing action", "error");
     }
@@ -70,21 +79,26 @@ export const AdminSubscriptions = () => {
 
   const handleExport = async () => {
     try {
-      const token = localStorage.getItem("adminToken");
-      const res = await fetch(
-        "http://localhost:3001/api/subscriptions/export",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "subscriptions.csv";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      const data = mockService.getSubscriptions();
+      const csvContent =
+        "data:text/csv;charset=utf-8," +
+        ["User,Email,Plan,Status,Start Date,End Date,Amount"]
+          .concat(
+            data.map(
+              (s) =>
+                `${s.userName},${s.userEmail},${s.plan},${s.status},${s.startDate},${s.endDate},"${s.amount}"`
+            )
+          )
+          .join("\n");
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "subscriptions.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showNotification("Export successful");
     } catch (err) {
       showNotification("Export failed", "error");
     }
@@ -103,6 +117,10 @@ export const AdminSubscriptions = () => {
       default:
         return "bg-gray-100 text-gray-800";
     }
+  };
+
+  const getPlanDetails = (planName) => {
+    return PRICING_PACKAGES.find((p) => p.name === planName);
   };
 
   return (
@@ -153,16 +171,13 @@ export const AdminSubscriptions = () => {
                   User
                 </th>
                 <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
-                  Plan
+                  Plan Details
                 </th>
                 <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
-                  Start Date
-                </th>
-                <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
-                  End Date
+                  Duration
                 </th>
                 <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider text-right">
                   Actions
@@ -172,86 +187,102 @@ export const AdminSubscriptions = () => {
             <tbody className="divide-y divide-gray-200 dark:divide-white/5">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center">
+                  <td colSpan="5" className="px-6 py-4 text-center">
                     Loading...
                   </td>
                 </tr>
               ) : subscriptions.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center">
+                  <td colSpan="5" className="px-6 py-4 text-center">
                     No subscriptions found
                   </td>
                 </tr>
               ) : (
-                subscriptions.map((sub) => (
-                  <tr
-                    key={sub.id}
-                    className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900 dark:text-white">
-                        {sub.userName}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {sub.userEmail}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
-                      {sub.plan}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                          sub.status
-                        )}`}
-                      >
-                        {sub.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
-                      {new Date(sub.startDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
-                      {new Date(sub.endDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-right space-x-2">
-                      {sub.status === "pending" && (
-                        <>
-                          <button
-                            onClick={() => handleAction(sub.id, "approve")}
-                            className="text-green-600 hover:text-green-900 font-bold text-xs uppercase"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => handleAction(sub.id, "reject")}
-                            className="text-red-600 hover:text-red-900 font-bold text-xs uppercase"
-                          >
-                            Reject
-                          </button>
-                        </>
-                      )}
-                      {sub.status === "active" && (
-                        <>
-                          <button
-                            onClick={() =>
-                              handleAction(sub.id, "extend", { months: 1 })
-                            }
-                            className="text-blue-600 hover:text-blue-900 font-bold text-xs uppercase"
-                          >
-                            Extend
-                          </button>
-                          <button
-                            onClick={() => handleAction(sub.id, "cancel")}
-                            className="text-red-600 hover:text-red-900 font-bold text-xs uppercase"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                subscriptions.map((sub) => {
+                  const plan = getPlanDetails(sub.plan);
+                  return (
+                    <tr
+                      key={sub.id}
+                      className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {sub.userName}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {sub.userEmail}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {sub.plan}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {plan ? `GHS ${plan.price}` : sub.amount}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
+                            sub.status
+                          )}`}
+                        >
+                          {sub.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
+                        <div className="text-xs">
+                          Start: {new Date(sub.startDate).toLocaleDateString()}
+                        </div>
+                        <div className="text-xs">
+                          End: {new Date(sub.endDate).toLocaleDateString()}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right space-x-2">
+                        {sub.status === "pending" && (
+                          <>
+                            <button
+                              onClick={() => handleAction(sub.id, "approve")}
+                              className="text-green-600 hover:text-green-900 font-bold text-xs uppercase"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleAction(sub.id, "reject")}
+                              className="text-red-600 hover:text-red-900 font-bold text-xs uppercase"
+                            >
+                              Reject
+                            </button>
+                          </>
+                        )}
+                        {sub.status === "active" && (
+                          <>
+                            <button
+                              onClick={() =>
+                                handleAction(sub.id, "extend", { months: 1 })
+                              }
+                              className="text-blue-600 hover:text-blue-900 font-bold text-xs uppercase"
+                            >
+                              Extend
+                            </button>
+                            <button
+                              onClick={() => handleAction(sub.id, "cancel")}
+                              className="text-red-600 hover:text-red-900 font-bold text-xs uppercase"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        )}
+                        {(sub.status === "cancelled" ||
+                          sub.status === "expired") && (
+                          <span className="text-gray-400 text-xs italic">
+                            No actions available
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
