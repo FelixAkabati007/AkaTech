@@ -239,7 +239,8 @@ export const WEBSITE_SAMPLES = [
 export const PORTFOLIO_DATA = {
   profile: {
     name: "AkaTech IT Solutions",
-    title: "AkaTech IT Solutions is a Ghana-based technology company delivering smart, secure, and scalable IT solutions for businesses, schools, and organizations. We specialize in custom software development, systems architecture, IT consulting, and EdTech innovation that drive digital growth and transformation.",
+    title:
+      "is a Ghana-based technology company delivering smart, secure, and scalable IT solutions for businesses, schools, and organizations. We specialize in custom software development, systems architecture, IT consulting, and EdTech innovation that drive digital growth and transformation.",
     bio: "Led by Felix Akabati, an experienced Software Engineer and System Architect, we combine technical expertise with strategic insight to empower communities and enterprises with future-ready technology.",
     image: "20221005_210833.jpg",
     location: "Kumasi - Ashanti Region, Ghana",

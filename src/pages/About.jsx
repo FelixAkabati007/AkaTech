@@ -64,7 +64,7 @@ export const About = () => {
             <h1 className="text-3xl md:text-5xl font-serif font-bold text-gray-900 dark:text-white mb-2">
               {PORTFOLIO_DATA.profile.name}
             </h1>
-            <p className="text-akatech-gold font-bold uppercase tracking-widest text-xs md:text-sm mb-6">
+            <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-6 max-w-2xl text-sm md:text-base">
               {PORTFOLIO_DATA.profile.title}
             </p>
             <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-6 max-w-2xl text-sm md:text-base">
