@@ -496,6 +496,21 @@ class MockService {
     this._save("subscriptions", this.subscriptions);
   }
 
+  addSubscription(subscription) {
+    const newSubscription = {
+      ...subscription,
+      id: this.subscriptions.length + 1,
+      status: "pending",
+      startDate: new Date().toISOString().split("T")[0],
+      endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1))
+        .toISOString()
+        .split("T")[0], // Default 1 year
+    };
+    this.subscriptions = [...this.subscriptions, newSubscription];
+    this._save("subscriptions", this.subscriptions);
+    return newSubscription;
+  }
+
   extendSubscription(id, months) {
     this.subscriptions = this.subscriptions.map((s) => {
       if (s.id === id) {

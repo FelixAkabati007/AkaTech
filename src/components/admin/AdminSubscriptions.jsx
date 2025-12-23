@@ -40,6 +40,25 @@ export const AdminSubscriptions = () => {
 
   useEffect(() => {
     fetchSubscriptions();
+
+    // Real-time sync listeners
+    const handleStorageChange = (e) => {
+      if (e.key === "subscriptions") {
+        fetchSubscriptions();
+      }
+    };
+
+    const handleCustomEvent = () => {
+      fetchSubscriptions();
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("subscriptionUpdated", handleCustomEvent);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("subscriptionUpdated", handleCustomEvent);
+    };
   }, [page, statusFilter]);
 
   const handleAction = async (id, action, details = {}) => {

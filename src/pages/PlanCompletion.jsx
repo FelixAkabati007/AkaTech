@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icons } from "@components/ui/Icons";
 import { useToast } from "@components/ui/ToastProvider";
+import { mockService } from "@lib/mockData";
 
 export const PlanCompletion = ({ plan, onBack, onHome }) => {
   const [step, setStep] = useState(1);
@@ -17,8 +18,12 @@ export const PlanCompletion = ({ plan, onBack, onHome }) => {
 
   const validate = () => {
     let tempErrors = {};
-    if (!formData.name) tempErrors.name = "Name is required";
-    if (!formData.email) tempErrors.email = "Email is required";
+    if (!formData.name.trim()) tempErrors.name = "Name is required";
+    if (!formData.email.trim()) {
+      tempErrors.email = "Email is required";
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      tempErrors.email = "Email is invalid";
+    }
     setErrors(tempErrors);
     return Object.keys(tempErrors).length === 0;
   };
@@ -28,16 +33,23 @@ export const PlanCompletion = ({ plan, onBack, onHome }) => {
     if (validate()) {
       setLoading(true);
       try {
-        const response = await fetch("http://localhost:3001/api/projects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...formData,
-            plan: plan.name,
-          }),
-        });
+        // Simulate network delay for realistic experience
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
-        if (!response.ok) throw new Error("Failed to submit request");
+        const subscriptionData = {
+          userName: formData.name,
+          userEmail: formData.email,
+          plan: plan.name,
+          amount: plan.price,
+          billingCycle: "Annual", // Defaulting to Annual as per mock data pattern
+          company: formData.company,
+          notes: formData.notes,
+        };
+
+        mockService.addSubscription(subscriptionData);
+
+        // Dispatch a custom event for real-time sync within the same window
+        window.dispatchEvent(new Event("subscriptionUpdated"));
 
         setStep(3);
         addToast(`Request for ${plan.name} received!`, "success");

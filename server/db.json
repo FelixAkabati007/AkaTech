@@ -89,6 +89,28 @@
       "timestamp": "2025-12-22T19:00:57.504Z",
       "status": "pending",
       "ip": "::1"
+    },
+    {
+      "id": "76c9b29f-7e34-46c6-9c1b-8214810e536e",
+      "name": "Ama Frema",
+      "email": "AmaFrem@Gmail.com",
+      "company": "Fremp",
+      "plan": "Premium Commerce",
+      "notes": "VGVzdCAx",
+      "timestamp": "2025-12-22T23:27:19.677Z",
+      "status": "pending",
+      "ip": "::1"
+    },
+    {
+      "id": "03e5aa38-16d7-436f-b4c2-aa9de4574372",
+      "name": "Yaa Biscuit",
+      "email": "YaaBee123@gmail.com",
+      "company": "YaaBee Beauty Pro",
+      "plan": "Startup Identity",
+      "notes": "VGV4dCAyIA==",
+      "timestamp": "2025-12-22T23:30:00.661Z",
+      "status": "pending",
+      "ip": "::1"
     }
   ],
   "tickets": [

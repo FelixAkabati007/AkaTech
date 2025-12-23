@@ -12,26 +12,26 @@ export const AdminDashboard = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      const token = localStorage.getItem("adminToken");
-      // if (!token) return; // Allow rendering with 0 if no token
       try {
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        // Simulate network delay
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // Fetch projects and tickets
-        const [projectsRes, ticketsRes] = await Promise.all([
-          fetch("http://localhost:3001/api/projects", { headers }),
-          fetch("http://localhost:3001/api/tickets", { headers }),
-        ]);
+        const projects = mockService.getProjects();
+        const tickets = mockService.getTickets();
+        const subscriptions = mockService.getSubscriptions();
 
-        const projects = projectsRes.ok ? await projectsRes.json() : [];
-        const tickets = ticketsRes.ok ? await ticketsRes.json() : [];
+        // Calculate revenue from subscriptions
+        const subscriptionRevenue = subscriptions.reduce((acc, sub) => {
+          const amount = parseFloat(sub.amount.replace(/,/g, "")) || 0;
+          return acc + amount;
+        }, 0);
 
         setStats({
-          totalUsers: 0, // Users API not yet implemented
+          totalUsers: mockService.getUsers().length,
           activeProjects: projects.filter(
             (p) => p.status !== "completed" && p.status !== "rejected"
           ).length,
-          totalRevenue: 0, // Invoices API not yet implemented
+          totalRevenue: subscriptionRevenue,
           pendingTickets: tickets.filter(
             (t) => t.status !== "resolved" && t.status !== "closed"
           ).length,
@@ -42,8 +42,25 @@ export const AdminDashboard = () => {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
+
+    // Real-time sync listeners
+    const handleStorageChange = (e) => {
+      if (["projects", "tickets", "subscriptions", "users"].includes(e.key)) {
+        fetchData();
+      }
+    };
+
+    const handleCustomEvent = () => {
+      fetchData();
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("subscriptionUpdated", handleCustomEvent);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("subscriptionUpdated", handleCustomEvent);
+    };
   }, []);
 
   const statCards = [
