@@ -91,6 +91,7 @@ const getDb = () => {
   if (!db.invoices) db.invoices = [];
   if (!db.subscriptions) db.subscriptions = [];
   if (!db.auditLogs) db.auditLogs = [];
+  if (!db.users) db.users = [];
   return db;
 };
 
@@ -154,6 +155,56 @@ const authorizeAdmin = (req, res, next) => {
 };
 
 // --- Routes ---
+
+// Google Auth
+app.post("/api/auth/google", async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: "Token required" });
+
+  try {
+    const response = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${token}`);
+    if (!response.ok) throw new Error("Failed to fetch user info");
+    const googleUser = await response.json();
+
+    const db = getDb();
+    let user = db.users.find((u) => u.email === googleUser.email);
+
+    if (!user) {
+      user = {
+        id: crypto.randomUUID(),
+        googleId: googleUser.sub,
+        email: googleUser.email,
+        name: googleUser.name,
+        avatarUrl: googleUser.picture,
+        role: "user",
+        joinedAt: new Date().toISOString(),
+      };
+      db.users.push(user);
+      saveDb(db);
+    }
+
+    const sessionToken = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      SECRET_KEY,
+      { expiresIn: "24h" }
+    );
+
+    res.json({ token: sessionToken, user });
+  } catch (error) {
+    console.error("Google Auth Error:", error);
+    res.status(401).json({ error: "Authentication failed" });
+  }
+});
+
+// 0.1 Get Current User (Session Persistence)
+app.get("/api/auth/me", authenticateToken, (req, res) => {
+  const db = getDb();
+  const user = db.users.find((u) => u.id === req.user.id);
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+  res.json({ user });
+});
 
 // 1. Client Message Submission
 app.post("/api/client-messages", (req, res) => {

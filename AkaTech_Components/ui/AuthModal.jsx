@@ -1,15 +1,32 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useGoogleLogin } from "@react-oauth/google";
 import { Icons } from "@components/ui/Icons";
 import { Logo } from "@components/ui/Logo";
 import { useToast } from "@components/ui/ToastProvider";
 
-export const AuthModal = ({ isOpen, onClose, onLogin, onSignup }) => {
+export const AuthModal = ({
+  isOpen,
+  onClose,
+  onLogin,
+  onSignup,
+  onGoogleLogin,
+}) => {
   const [isLoginView, setIsLoginView] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const { addToast } = useToast();
   const modalRef = useRef(null);
+
+  const googleLogin = useGoogleLogin({
+    onSuccess: (tokenResponse) => {
+      if (onGoogleLogin) {
+        onGoogleLogin(tokenResponse);
+        addToast("Signed in with Google", "success");
+      }
+    },
+    onError: () => addToast("Google Sign In Failed", "error"),
+  });
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -128,15 +145,12 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onSignup }) => {
             </div>
 
             <button
-              onClick={() => {
-                onLogin("google-user");
-                addToast("Signed in with Google", "success");
-              }}
+              onClick={() => googleLogin()}
               className="w-full bg-gray-50 dark:bg-white text-black py-3 mb-6 flex items-center justify-center gap-3 hover:bg-gray-100 dark:hover:bg-gray-200 transition border border-gray-200 dark:border-transparent"
             >
               <Icons.Google className="w-5 h-5" />
               <span className="text-xs font-bold uppercase tracking-wider">
-                Continue with Google
+                {isLoginView ? "Sign in with Google" : "Sign up with Google"}
               </span>
             </button>
 

@@ -301,5 +301,16 @@
       },
       "timestamp": "2025-12-23T14:07:26.404Z"
     }
+  ],
+  "users": [
+    {
+      "id": "5dc236c6-2c8a-414c-b1da-4d09ff62177c",
+      "googleId": "116947380530353806482",
+      "email": "harrisonbanks007@gmail.com",
+      "name": "Felix Akabati",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocLB1mDd6kpl_z6VM8iYL2uIVseJBu5UIT9A9nCqtOLOL_MxKyMh=s96-c",
+      "role": "user",
+      "joinedAt": "2025-12-24T19:15:11.380Z"
+    }
   ]
 }
