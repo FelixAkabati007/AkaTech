@@ -98,6 +98,9 @@ dist
 # Serverless directories
 .serverless/
 
+# Local Repositories
+repos/
+
 # FuseBox cache
 .fusebox/
 
