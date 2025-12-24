@@ -11,6 +11,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
     "@splinetool/react-spline": "^4.1.0",
     "@splinetool/runtime": "^1.12.23",
     "@tailwindcss/postcss": "^4.1.18",
@@ -44,9 +45,11 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^25.0.3",
     "@vitejs/plugin-react": "^5.1.2",
     "happy-dom": "^20.0.11",
     "jsdom": "^27.3.0",
+    "typescript": "^5.9.3",
     "vite": "^7.3.0",
     "vitest": "^4.0.16"
   }

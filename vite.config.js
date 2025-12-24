@@ -27,6 +27,8 @@ export default defineConfig({
           vendor: ["react", "react-dom", "framer-motion"],
           ui: ["lucide-react", "clsx", "tailwind-merge"],
           spline: ["@splinetool/react-spline", "@splinetool/runtime"],
+          pdf: ["jspdf", "html2canvas"],
+          realtime: ["socket.io-client"],
         },
       },
     },
