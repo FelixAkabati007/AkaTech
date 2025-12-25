@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { io } from "socket.io-client";
 import { Icons } from "@components/ui/Icons";
 import { Avatar } from "@components/ui/Avatar";
 import { ClientDashboard } from "./ClientDashboard";
@@ -44,9 +45,34 @@ export const ClientLayout = ({ user, onLogout }) => {
 
     fetchNotifications();
 
-    // Setup socket listener for real-time notifications could be done here too
-    // But for now, we'll stick to initial fetch
-  }, []);
+    // Setup socket listener for real-time notifications
+    const socket = io("http://localhost:3001", {
+      transports: ["websocket", "polling"],
+      withCredentials: true,
+      reconnectionAttempts: 5,
+    });
+
+    socket.on("connect", () => {
+      console.log("Connected to notification socket");
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("Socket connection error:", err);
+    });
+
+    socket.on("notification", (newNotification) => {
+      if (
+        newNotification.recipientId === "all" ||
+        (user && newNotification.recipientId === user.id)
+      ) {
+        setNotifications((prev) => [newNotification, ...prev]);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

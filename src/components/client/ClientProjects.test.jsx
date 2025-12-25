@@ -15,6 +15,7 @@ vi.mock("@components/ui/Icons", () => ({
     Upload: () => <div data-testid="icon-upload" />,
     Download: () => <div data-testid="icon-download" />,
     X: () => <div data-testid="icon-x" />,
+    Folder: () => <div data-testid="icon-folder" />,
   },
 }));
 
@@ -67,6 +68,9 @@ describe("ClientProjects", () => {
       expect(screen.getByText(/Alpha Project/i)).toBeInTheDocument();
       expect(screen.getByText(/Beta Project/i)).toBeInTheDocument();
     });
+
+    // Check for empty state
+    expect(screen.getByText("No Project Selected")).toBeInTheDocument();
   });
 
   it("filters projects based on search query", async () => {
@@ -94,9 +98,11 @@ describe("ClientProjects", () => {
     fireEvent.click(screen.getByText(/Alpha Project/i));
 
     // Check if details are shown (Timeline, Deliverables headers)
-    expect(screen.getByText("Timeline")).toBeInTheDocument();
-    expect(screen.getByText("Deliverables")).toBeInTheDocument();
-    expect(screen.getByText("Request Update")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Timeline")).toBeInTheDocument();
+      expect(screen.getByText("Deliverables")).toBeInTheDocument();
+      expect(screen.getByText("Request Update")).toBeInTheDocument();
+    });
   });
 
   it("opens request update modal and sends request", async () => {
@@ -109,7 +115,9 @@ describe("ClientProjects", () => {
     fireEvent.click(screen.getByText(/Alpha Project/i));
 
     // Click Request Update
-    fireEvent.click(screen.getByText("Request Update"));
+    await waitFor(() => {
+      fireEvent.click(screen.getByText("Request Update"));
+    });
 
     // Check if modal opens
     expect(screen.getByText("Request Project Update")).toBeInTheDocument();

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icons } from "@components/ui/Icons";
+import ProjectEmptyState from "./ProjectEmptyState";
 
 export const ClientProjects = ({ user }) => {
   const [projects, setProjects] = useState([]);
@@ -296,10 +297,7 @@ export const ClientProjects = ({ user }) => {
                 </div>
               </motion.div>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-gray-400 p-12 border-2 border-dashed border-gray-200 dark:border-white/10 rounded-lg">
-                <Icons.Code className="w-12 h-12 mb-4 opacity-20" />
-                <p>Select a project to view details</p>
-              </div>
+              <ProjectEmptyState />
             )}
           </AnimatePresence>
         </div>

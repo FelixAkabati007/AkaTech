@@ -372,6 +372,33 @@
         "title": "Test Notification 2"
       },
       "timestamp": "2025-12-25T10:57:49.996Z"
+    },
+    {
+      "id": "f924dbbc-c172-49d3-a715-799b0218f7df",
+      "action": "SEND_NOTIFICATION",
+      "details": {
+        "recipientId": "7f765e65-f0da-4049-ac5e-d29eeb7e86b8",
+        "title": "Test Notification"
+      },
+      "timestamp": "2025-12-25T14:03:24.134Z"
+    },
+    {
+      "id": "62a52b01-9468-465d-9260-aec718a4ed55",
+      "action": "SEND_NOTIFICATION",
+      "details": {
+        "recipientId": "7ca77155-3f94-4440-a58a-b7ba0a8aa147",
+        "title": "Test Notification"
+      },
+      "timestamp": "2025-12-25T14:04:03.528Z"
+    },
+    {
+      "id": "b5b1822c-9afb-4280-8567-a64241de7a3e",
+      "action": "SEND_NOTIFICATION",
+      "details": {
+        "recipientId": "all",
+        "title": "Maintainance"
+      },
+      "timestamp": "2025-12-25T14:20:45.251Z"
     }
   ],
   "users": [
@@ -381,7 +408,7 @@
       "email": "harrisonbanks007@gmail.com",
       "name": "Felix Akabati",
       "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocLB1mDd6kpl_z6VM8iYL2uIVseJBu5UIT9A9nCqtOLOL_MxKyMh=s96-c",
-      "role": "user",
+      "role": "admin",
       "joinedAt": "2025-12-24T19:15:11.380Z"
     },
     {
@@ -437,6 +464,49 @@
       "role": "client",
       "joinedAt": "2025-12-25T10:57:49.889Z",
       "accountType": "Auto"
+    },
+    {
+      "id": "157188bd-8e4b-4f4b-9e5f-ae993c885dda",
+      "name": "Admin User",
+      "email": "admin_1766671403893@test.com",
+      "password": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "admin",
+      "joinedAt": "2025-12-25T14:03:24.013Z",
+      "accountType": "Auto"
+    },
+    {
+      "id": "7f765e65-f0da-4049-ac5e-d29eeb7e86b8",
+      "name": "Client User",
+      "email": "client_1766671404083@test.com",
+      "password": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "client",
+      "joinedAt": "2025-12-25T14:03:24.093Z",
+      "accountType": "Auto"
+    },
+    {
+      "id": "f1ac911c-d8b2-4e72-ac66-09207049f757",
+      "name": "Admin User",
+      "email": "admin_1766671442261@test.com",
+      "password": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "admin",
+      "joinedAt": "2025-12-25T14:04:02.349Z",
+      "accountType": "Auto"
+    },
+    {
+      "id": "7ca77155-3f94-4440-a58a-b7ba0a8aa147",
+      "name": "Client User",
+      "email": "client_1766671442374@test.com",
+      "password": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "client",
+      "joinedAt": "2025-12-25T14:04:02.383Z",
+      "accountType": "Auto"
+    },
+    {
+      "id": "e29eeb2b-f167-4f35-b867-b07dc6bb2465",
+      "name": "System Admin",
+      "email": "admin@akatech.com",
+      "role": "admin",
+      "joinedAt": "2025-12-25T15:07:58.573Z"
     }
   ],
   "notifications": [
@@ -492,6 +562,35 @@
       "timestamp": "2025-12-25T10:57:49.993Z",
       "readBy": [
         "8e41f839-8175-4f2f-a1d4-fd32bc8658b9"
+      ]
+    },
+    {
+      "id": "9203e7b6-5f25-4c90-acbf-92e47ba05f79",
+      "recipientId": "7f765e65-f0da-4049-ac5e-d29eeb7e86b8",
+      "title": "Test Notification",
+      "message": "This is a test notification",
+      "type": "info",
+      "timestamp": "2025-12-25T14:03:24.132Z",
+      "readBy": []
+    },
+    {
+      "id": "1ee36f6f-a8ee-4d80-9caa-d17cd8847677",
+      "recipientId": "7ca77155-3f94-4440-a58a-b7ba0a8aa147",
+      "title": "Test Notification",
+      "message": "This is a test notification",
+      "type": "info",
+      "timestamp": "2025-12-25T14:04:03.522Z",
+      "readBy": []
+    },
+    {
+      "id": "4215589b-04c4-431a-b2f0-e2959831ae9c",
+      "recipientId": "all",
+      "title": "Maintainance",
+      "message": "Scheduled today on 25/12/2025.\nTest",
+      "type": "info",
+      "timestamp": "2025-12-25T14:20:45.241Z",
+      "readBy": [
+        "5dc236c6-2c8a-414c-b1da-4d09ff62177c"
       ]
     }
   ]

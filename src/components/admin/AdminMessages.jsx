@@ -20,7 +20,7 @@ export const AdminMessages = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem("adminToken"));
+  const [token, setToken] = useState(localStorage.getItem("token"));
 
   // Compose State
   const [isComposeOpen, setIsComposeOpen] = useState(false);
@@ -78,7 +78,7 @@ export const AdminMessages = () => {
       });
       const data = await res.json();
       if (data.token) {
-        localStorage.setItem("adminToken", data.token);
+        localStorage.setItem("token", data.token);
         setToken(data.token);
         return data.token;
       }
@@ -90,9 +90,9 @@ export const AdminMessages = () => {
 
   useEffect(() => {
     const init = async () => {
-      let currentToken = localStorage.getItem("adminToken");
+      let currentToken = localStorage.getItem("token");
       if (!currentToken) {
-        currentToken = await performLogin();
+        // currentToken = await performLogin(); // Disable auto-login for now to prevent loop if backend fails
       }
       if (currentToken) {
         fetchMessages(currentToken);
@@ -167,7 +167,7 @@ export const AdminMessages = () => {
     });
 
     socket.on("update_subscriptions", () => {
-      const token = localStorage.getItem("adminToken");
+      const token = localStorage.getItem("token");
       if (token) fetchClients(token, false);
     });
 

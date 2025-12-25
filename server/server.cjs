@@ -135,11 +135,22 @@ const authenticateToken = (req, res, next) => {
       .status(401)
       .json({ error: "Unauthorized", message: "No token provided" });
 
-  jwt.verify(token, SECRET_KEY, (err, user) => {
+  jwt.verify(token, SECRET_KEY, (err, decoded) => {
     if (err)
       return res
         .status(403)
         .json({ error: "Forbidden", message: "Invalid or expired token" });
+
+    // Fetch latest user data from DB to ensure role is up-to-date
+    const db = getDb();
+    const user = db.users.find((u) => u.id === decoded.id);
+
+    if (!user) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized", message: "User not found" });
+    }
+
     req.user = user;
     next();
   });
@@ -498,12 +509,31 @@ app.get("/api/clients", authenticateToken, (req, res) => {
 // 2. Admin Login (Demo)
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
-  // Hardcoded for demo
+
   if (username === "admin" && password === "admin123") {
-    const token = jwt.sign({ username: "admin", role: "admin" }, SECRET_KEY, {
-      expiresIn: "1h",
-    });
-    res.json({ token });
+    // Ensure admin user exists in DB
+    const db = getDb();
+    let adminUser = db.users.find((u) => u.email === "admin@akatech.com");
+
+    if (!adminUser) {
+      adminUser = {
+        id: crypto.randomUUID(),
+        name: "System Admin",
+        email: "admin@akatech.com",
+        role: "admin",
+        joinedAt: new Date().toISOString(),
+      };
+      db.users.push(adminUser);
+      saveDb(db);
+    }
+
+    const token = jwt.sign(
+      { id: adminUser.id, email: adminUser.email, role: "admin" },
+      SECRET_KEY,
+      { expiresIn: "1h" }
+    );
+
+    res.json({ token, user: adminUser });
   } else {
     res.status(401).json({ error: "Invalid credentials" });
   }
@@ -907,6 +937,6 @@ io.on("connection", (socket) => {
 });
 
 // --- Start Server ---
-server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on http://0.0.0.0:${PORT}`);
 });
