@@ -1,0 +1,632 @@
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { GoogleLogin } from "@react-oauth/google";
+import { Icons } from "@components/ui/Icons";
+import { PRICING_PACKAGES } from "@lib/data";
+
+const API_URL = "http://localhost:3001/api";
+
+const StepPackageSelection = ({ selectedPackage, onSelect }) => {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-serif font-bold text-gray-900 dark:text-white mb-4">
+        Select Your Package
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {PRICING_PACKAGES.map((pkg) => (
+          <div
+            key={pkg.name}
+            onClick={() => onSelect(pkg)}
+            className={`cursor-pointer rounded-xl p-6 border-2 transition-all ${
+              selectedPackage?.name === pkg.name
+                ? "border-akatech-gold bg-akatech-gold/5 dark:bg-akatech-gold/10 transform scale-105"
+                : "border-gray-200 dark:border-white/10 hover:border-akatech-gold/50"
+            }`}
+          >
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="font-bold text-lg text-gray-900 dark:text-white">
+                {pkg.name}
+              </h3>
+              {selectedPackage?.name === pkg.name && (
+                <div className="h-6 w-6 bg-akatech-gold rounded-full flex items-center justify-center text-white">
+                  <Icons.Check size={14} />
+                </div>
+              )}
+            </div>
+            <div className="text-2xl font-bold text-akatech-gold mb-2">
+              GH₵ {pkg.price}
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              {pkg.description}
+            </p>
+            <ul className="space-y-2">
+              {pkg.features.slice(0, 3).map((feature, idx) => (
+                <li
+                  key={idx}
+                  className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-2"
+                >
+                  <Icons.Check size={12} className="text-green-500" />
+                  {feature}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const StepEmailVerification = ({
+  email,
+  setEmail,
+  onVerify,
+  verified,
+  loading,
+}) => {
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSendCode = async () => {
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    setError("");
+    try {
+      await onVerify("send", { email });
+      setSent(true);
+    } catch (err) {
+      setError(err.message || "Failed to send verification code.");
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!code || code.length < 6) {
+      setError("Please enter the 6-digit code.");
+      return;
+    }
+    setError("");
+    try {
+      await onVerify("validate", { email, code });
+    } catch (err) {
+      setError(err.message || "Invalid verification code.");
+    }
+  };
+
+  if (verified) {
+    return (
+      <div className="text-center py-8">
+        <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Icons.Check size={32} />
+        </div>
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+          Email Verified!
+        </h3>
+        <p className="text-gray-500">You can now proceed to the next step.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-md mx-auto space-y-6">
+      <h2 className="text-2xl font-serif font-bold text-gray-900 dark:text-white mb-4">
+        Verify Your Email
+      </h2>
+      <p className="text-gray-500 text-sm mb-6">
+        We need to verify your email to secure your progress and account.
+      </p>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
+            Email Address
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={sent}
+              className="flex-1 bg-white dark:bg-akatech-card border border-gray-200 dark:border-white/10 rounded-lg px-4 py-2 text-gray-900 dark:text-white focus:outline-none focus:border-akatech-gold"
+              placeholder="you@example.com"
+            />
+            {!sent && (
+              <button
+                onClick={handleSendCode}
+                disabled={loading}
+                className="bg-akatech-gold text-white px-4 py-2 rounded-lg text-sm font-bold uppercase disabled:opacity-50"
+              >
+                {loading ? "Sending..." : "Send Code"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {sent && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
+              Verification Code
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={code}
+                onChange={(e) =>
+                  setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+                className="flex-1 bg-white dark:bg-akatech-card border border-gray-200 dark:border-white/10 rounded-lg px-4 py-2 text-gray-900 dark:text-white focus:outline-none focus:border-akatech-gold tracking-widest text-center text-lg"
+                placeholder="000000"
+              />
+              <button
+                onClick={handleVerifyCode}
+                disabled={loading}
+                className="bg-akatech-gold text-white px-4 py-2 rounded-lg text-sm font-bold uppercase disabled:opacity-50"
+              >
+                {loading ? "Verifying..." : "Verify"}
+              </button>
+            </div>
+            <button
+              onClick={() => setSent(false)}
+              className="text-xs text-akatech-gold mt-2 hover:underline"
+            >
+              Change Email / Resend Code
+            </button>
+          </motion.div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2">
+            <Icons.AlertTriangle size={16} />
+            {error}
+          </div>
+        )}
+
+        <div className="relative flex items-center justify-center my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-200 dark:border-white/10"></div>
+          </div>
+          <div className="relative z-10 bg-gray-50 dark:bg-akatech-dark px-4 text-xs uppercase text-gray-500 font-bold">
+            Or continue with
+          </div>
+        </div>
+
+        <div className="flex justify-center relative">
+          {loading && (
+            <div className="absolute inset-0 z-10 bg-white/50 dark:bg-black/50 flex items-center justify-center rounded-full">
+              <div className="w-6 h-6 border-2 border-akatech-gold border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          )}
+          <GoogleLogin
+            onSuccess={(credentialResponse) => {
+              setError(""); // Clear previous errors
+              onVerify("google", {
+                token: credentialResponse.credential,
+              }).catch((err) => {
+                console.error("Google verify error:", err);
+                setError(
+                  err.message || "Google verification failed. Please try again."
+                );
+              });
+            }}
+            onError={() => {
+              console.log("Login Failed");
+              setError("Google Login Failed. Please try again.");
+            }}
+            theme="filled_blue"
+            shape="pill"
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const StepDetails = ({ formData, setFormData, errors }) => {
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      <h2 className="text-2xl font-serif font-bold text-gray-900 dark:text-white mb-4">
+        Project Details
+      </h2>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
+            Full Name *
+          </label>
+          <input
+            type="text"
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            className={`w-full bg-white dark:bg-akatech-card border ${
+              errors.name
+                ? "border-red-500"
+                : "border-gray-200 dark:border-white/10"
+            } rounded-lg px-4 py-3 text-gray-900 dark:text-white focus:outline-none focus:border-akatech-gold`}
+            placeholder="John Doe"
+          />
+          {errors.name && (
+            <p className="text-red-500 text-xs mt-1">{errors.name}</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
+            Phone Number *
+          </label>
+          <input
+            type="tel"
+            name="phone"
+            value={formData.phone}
+            onChange={handleChange}
+            className={`w-full bg-white dark:bg-akatech-card border ${
+              errors.phone
+                ? "border-red-500"
+                : "border-gray-200 dark:border-white/10"
+            } rounded-lg px-4 py-3 text-gray-900 dark:text-white focus:outline-none focus:border-akatech-gold`}
+            placeholder="+233 20 000 0000"
+          />
+          {errors.phone && (
+            <p className="text-red-500 text-xs mt-1">{errors.phone}</p>
+          )}
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
+            Company / Business Name
+          </label>
+          <input
+            type="text"
+            name="companyName"
+            value={formData.companyName}
+            onChange={handleChange}
+            className="w-full bg-white dark:bg-akatech-card border border-gray-200 dark:border-white/10 rounded-lg px-4 py-3 text-gray-900 dark:text-white focus:outline-none focus:border-akatech-gold"
+            placeholder="AkaTech Solutions"
+          />
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
+            Project Description / Notes
+          </label>
+          <textarea
+            name="notes"
+            value={formData.notes}
+            onChange={handleChange}
+            rows={4}
+            className="w-full bg-white dark:bg-akatech-card border border-gray-200 dark:border-white/10 rounded-lg px-4 py-3 text-gray-900 dark:text-white focus:outline-none focus:border-akatech-gold resize-none"
+            placeholder="Tell us about your project requirements..."
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const StepConfirmation = ({
+  formData,
+  selectedPackage,
+  onConfirm,
+  loading,
+  error,
+}) => {
+  const [agreed, setAgreed] = useState(false);
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-8">
+      <h2 className="text-2xl font-serif font-bold text-gray-900 dark:text-white mb-4 text-center">
+        Review & Confirm
+      </h2>
+
+      <div className="bg-white dark:bg-akatech-card border border-gray-200 dark:border-white/10 rounded-xl p-6 space-y-4">
+        <div className="flex justify-between items-center pb-4 border-b border-gray-100 dark:border-white/5">
+          <span className="text-gray-500 text-sm">Selected Package</span>
+          <span className="font-bold text-gray-900 dark:text-white">
+            {selectedPackage?.name}
+          </span>
+        </div>
+        <div className="flex justify-between items-center pb-4 border-b border-gray-100 dark:border-white/5">
+          <span className="text-gray-500 text-sm">Price</span>
+          <span className="font-bold text-akatech-gold">
+            GH₵ {selectedPackage?.price}
+          </span>
+        </div>
+        <div className="flex justify-between items-center pb-4 border-b border-gray-100 dark:border-white/5">
+          <span className="text-gray-500 text-sm">Email</span>
+          <span className="font-medium text-gray-900 dark:text-white">
+            {formData.email}
+          </span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-gray-500 text-sm">Contact</span>
+          <div className="text-right">
+            <div className="font-medium text-gray-900 dark:text-white">
+              {formData.name}
+            </div>
+            <div className="text-xs text-gray-500">{formData.phone}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-lg">
+        <input
+          type="checkbox"
+          id="terms"
+          checked={agreed}
+          onChange={(e) => setAgreed(e.target.checked)}
+          className="mt-1"
+        />
+        <label
+          htmlFor="terms"
+          className="text-sm text-gray-600 dark:text-gray-300"
+        >
+          I agree to the{" "}
+          <a href="#" className="text-akatech-gold hover:underline">
+            Terms of Service
+          </a>{" "}
+          and{" "}
+          <a href="#" className="text-akatech-gold hover:underline">
+            Privacy Policy
+          </a>
+          . I understand that this information will be securely stored and used
+          to initiate my project.
+        </label>
+      </div>
+
+      {error && (
+        <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg text-center">
+          {error}
+        </div>
+      )}
+
+      <button
+        onClick={onConfirm}
+        disabled={!agreed || loading}
+        className="w-full bg-akatech-gold text-white py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-akatech-goldDark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {loading ? "Completing Signup..." : "Complete Signup & Pay"}
+      </button>
+    </div>
+  );
+};
+
+export const SignupWizard = ({ initialPlan, onBack, onComplete }) => {
+  const [step, setStep] = useState(initialPlan ? 2 : 1);
+  const [selectedPackage, setSelectedPackage] = useState(initialPlan || null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Form Data
+  const [formData, setFormData] = useState({
+    email: "",
+    name: "",
+    phone: "",
+    companyName: "",
+    notes: "",
+  });
+
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
+
+  // Restore progress from local storage or API if email is entered
+  useEffect(() => {
+    // Logic to restore could go here
+  }, []);
+
+  const handlePackageSelect = (pkg) => {
+    setSelectedPackage(pkg);
+    setStep(2);
+  };
+
+  const handleEmailVerification = async (action, payload) => {
+    setLoading(true);
+    try {
+      let endpoint;
+      if (action === "send") endpoint = "/signup/verify-email";
+      else if (action === "validate") endpoint = "/signup/validate-code";
+      else if (action === "google") endpoint = "/signup/verify-google";
+
+      const res = await fetch(`${API_URL}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Verification failed");
+
+      if (action === "validate" || action === "google") {
+        setEmailVerified(true);
+        if (data.email) {
+          setFormData((prev) => ({ ...prev, email: data.email }));
+        }
+
+        // Try to fetch existing progress
+        try {
+          const progressRes = await fetch(
+            `${API_URL}/signup/progress?email=${data.email || payload.email}`
+          );
+          if (progressRes.ok) {
+            const progressData = await progressRes.json();
+            if (progressData.data) {
+              setFormData((prev) => ({ ...prev, ...progressData.data }));
+              if (progressData.data.selectedPackage) {
+                const pkg = PRICING_PACKAGES.find(
+                  (p) => p.name === progressData.data.selectedPackage
+                );
+                if (pkg) setSelectedPackage(pkg);
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Failed to load progress", e);
+        }
+        setTimeout(() => setStep(3), 1000);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveProgress = async () => {
+    if (!formData.email || !emailVerified) return;
+    try {
+      await fetch(`${API_URL}/signup/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          data: { ...formData, selectedPackage: selectedPackage?.name },
+        }),
+      });
+    } catch (e) {
+      console.error("Failed to save progress", e);
+    }
+  };
+
+  const handleDetailsNext = async () => {
+    // Validate
+    const errors = {};
+    if (!formData.name) errors.name = "Name is required";
+    if (!formData.phone) errors.phone = "Phone is required";
+    setFormErrors(errors);
+
+    if (Object.keys(errors).length === 0) {
+      await saveProgress();
+      setStep(4);
+    }
+  };
+
+  const handleComplete = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/signup/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          finalData: { ...formData, selectedPackage: selectedPackage?.name },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Signup failed");
+
+      // Save token
+      localStorage.setItem("token", data.token);
+
+      if (onComplete) onComplete(data.user);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-akatech-dark pt-28 pb-12">
+      <div className="container mx-auto px-4 max-w-4xl">
+        {/* Progress Bar */}
+        <div className="mb-8">
+          <div className="flex justify-between mb-2">
+            {["Package", "Verify", "Details", "Confirm"].map((label, idx) => (
+              <div
+                key={label}
+                className={`text-xs font-bold uppercase tracking-widest ${
+                  step > idx + 1
+                    ? "text-green-500"
+                    : step === idx + 1
+                    ? "text-akatech-gold"
+                    : "text-gray-300"
+                }`}
+              >
+                {label}
+              </div>
+            ))}
+          </div>
+          <div className="h-1 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-akatech-gold"
+              initial={{ width: "0%" }}
+              animate={{ width: `${(step / 4) * 100}%` }}
+              transition={{ duration: 0.5 }}
+            />
+          </div>
+        </div>
+
+        {/* Back Button */}
+        {step > 1 && (
+          <button
+            onClick={() => setStep((s) => s - 1)}
+            className="mb-6 flex items-center gap-2 text-gray-500 hover:text-akatech-gold transition-colors text-sm font-bold uppercase tracking-wider"
+          >
+            <span>←</span> Back
+          </button>
+        )}
+
+        {/* Content */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {step === 1 && (
+              <StepPackageSelection
+                selectedPackage={selectedPackage}
+                onSelect={handlePackageSelect}
+              />
+            )}
+            {step === 2 && (
+              <StepEmailVerification
+                email={formData.email}
+                setEmail={(e) => setFormData((prev) => ({ ...prev, email: e }))}
+                onVerify={handleEmailVerification}
+                verified={emailVerified}
+                loading={loading}
+              />
+            )}
+            {step === 3 && (
+              <div>
+                <StepDetails
+                  formData={formData}
+                  setFormData={setFormData}
+                  errors={formErrors}
+                />
+                <div className="flex justify-end mt-6 max-w-2xl mx-auto">
+                  <button
+                    onClick={handleDetailsNext}
+                    className="bg-akatech-gold text-white px-8 py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-akatech-goldDark transition-colors"
+                  >
+                    Next Step
+                  </button>
+                </div>
+              </div>
+            )}
+            {step === 4 && (
+              <StepConfirmation
+                formData={formData}
+                selectedPackage={selectedPackage}
+                onConfirm={handleComplete}
+                loading={loading}
+                error={error}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+};

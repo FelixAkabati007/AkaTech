@@ -39,6 +39,7 @@ import {
   Send,
   Bell,
   PenTool,
+  AlertTriangle,
 } from "lucide-react";
 export const Icons = {
   Code,
@@ -81,4 +82,5 @@ export const Icons = {
   Send,
   Bell,
   PenTool,
+  AlertTriangle,
 };

@@ -49,6 +49,7 @@ import {
   Send,
   Loader,
   Folder,
+  AlertTriangle,
 } from "lucide-react";
 
 export const Icons = {
@@ -103,6 +104,7 @@ export const Icons = {
   Send,
   Loader,
   Folder,
+  AlertTriangle,
   Google: (props) => (
     <svg
       {...props}

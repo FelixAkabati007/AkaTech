@@ -235,7 +235,8 @@ export default function App() {
                 <PlanCompletion
                   plan={selectedPlan}
                   onBack={() => handleNavigate("landing")}
-                  onHome={() => handleNavigate("landing")}
+                  onNavigate={handleNavigate}
+                  onUserUpdate={handleUserUpdate}
                 />
               )}
             </Suspense>
