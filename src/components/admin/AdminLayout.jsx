@@ -12,6 +12,7 @@ import { AdminProfile } from "./AdminProfile";
 import { AdminProjects } from "./AdminProjects";
 import { AdminMessages } from "./AdminMessages";
 import { AdminSubscriptions } from "./AdminSubscriptions";
+import { AdminNotifications } from "./AdminNotifications";
 
 export const AdminLayout = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -43,6 +44,7 @@ export const AdminLayout = ({ user, onLogout }) => {
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: Icons.LayoutDashboard },
     { id: "messages", label: "Messages", icon: Icons.MessageSquare },
+    { id: "notifications", label: "Notifications", icon: Icons.Bell },
     { id: "clients", label: "Clients", icon: Icons.Users },
     { id: "projects", label: "Projects", icon: Icons.Briefcase },
     { id: "subscriptions", label: "Subscriptions", icon: Icons.CreditCard },
@@ -57,6 +59,8 @@ export const AdminLayout = ({ user, onLogout }) => {
         return <AdminDashboard user={user} />;
       case "messages":
         return <AdminMessages />;
+      case "notifications":
+        return <AdminNotifications />;
       case "clients":
         return <AdminClients />;
       case "projects":

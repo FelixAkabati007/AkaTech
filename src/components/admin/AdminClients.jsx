@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Icons } from "@components/ui/Icons";
 import { mockService } from "@lib/mockData";
+import { useToast } from "@components/ui/ToastProvider";
+import { io } from "socket.io-client";
 
 export const AdminClients = () => {
   const [users, setUsers] = useState([]);
@@ -8,34 +10,105 @@ export const AdminClients = () => {
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
+    password: "",
     role: "client",
   });
+  const { addToast } = useToast();
 
-  useEffect(() => {
-    setUsers(mockService.getUsers());
+  const fetchUsers = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const res = await fetch("http://localhost:3001/api/users", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data);
+      } else {
+        // Fallback to mock if API fails or not admin
+        console.warn("Failed to fetch users, falling back to mock data");
+        setUsers(mockService.getUsers());
+      }
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      setUsers(mockService.getUsers());
+    }
   }, []);
 
-  const handleAddUser = (e) => {
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  useEffect(() => {
+    const socket = io("http://localhost:3001");
+
+    socket.on("user_registered", (registeredUser) => {
+      setUsers((prevUsers) => {
+        // Prevent duplicates
+        if (
+          prevUsers.some(
+            (u) =>
+              u.id === registeredUser.id || u.email === registeredUser.email
+          )
+        ) {
+          return prevUsers;
+        }
+        addToast(`New client registered: ${registeredUser.name}`, "info");
+        return [...prevUsers, registeredUser];
+      });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [addToast]);
+
+  const handleRegister = async (e) => {
     e.preventDefault();
-    if (newUser.id) {
-      mockService.updateUser(newUser);
-    } else {
-      mockService.saveUser({ ...newUser, password: "password123" }); // Default password
+
+    // Basic Validation
+    if (!newUser.name || !newUser.email || (!newUser.id && !newUser.password)) {
+      addToast("Please fill in all required fields", "error");
+      return;
     }
-    setUsers(mockService.getUsers());
-    setIsModalOpen(false);
-    setNewUser({ name: "", email: "", role: "client" });
+
+    try {
+      const res = await fetch("http://localhost:3001/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newUser, accountType: "manual" }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        addToast("User registered successfully!", "success");
+        fetchUsers();
+        setIsModalOpen(false);
+        setNewUser({ name: "", email: "", password: "", role: "client" });
+      } else {
+        addToast(data.error || "Registration failed", "error");
+      }
+    } catch (error) {
+      console.error("Registration Error:", error);
+      addToast("An error occurred during registration", "error");
+    }
   };
 
   const handleEditUser = (user) => {
-    setNewUser(user);
+    setNewUser({ ...user, password: "" }); // Don't show password
     setIsModalOpen(true);
   };
 
   const handleDeleteUser = (id) => {
     if (window.confirm("Are you sure you want to delete this user?")) {
+      // API call to delete user would go here
       mockService.deleteUser(id);
       setUsers(mockService.getUsers());
+      addToast("User deleted (mock)", "info");
     }
   };
 
@@ -46,7 +119,10 @@ export const AdminClients = () => {
           User Management
         </h2>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setNewUser({ name: "", email: "", password: "", role: "client" });
+            setIsModalOpen(true);
+          }}
           className="px-4 py-2 bg-akatech-gold text-white text-sm font-bold uppercase tracking-widest hover:bg-akatech-goldDark transition-colors flex items-center gap-2"
         >
           <Icons.Plus className="w-4 h-4" /> Add User
@@ -67,6 +143,12 @@ export const AdminClients = () => {
                 <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
                   Role
                 </th>
+                <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
+                  Account Type
+                </th>
+                <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
+                  Joined
+                </th>
                 <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider text-right">
                   Actions
                 </th>
@@ -80,8 +162,16 @@ export const AdminClients = () => {
                 >
                   <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-akatech-gold flex items-center justify-center text-white font-bold text-xs">
-                        {user.name.charAt(0)}
+                      <div className="w-8 h-8 rounded-full bg-akatech-gold flex items-center justify-center text-white font-bold text-xs overflow-hidden">
+                        {user.avatarUrl ? (
+                          <img
+                            src={user.avatarUrl}
+                            alt={user.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          user.name.charAt(0)
+                        )}
                       </div>
                       {user.name}
                     </div>
@@ -93,6 +183,14 @@ export const AdminClients = () => {
                     <span className="px-2 py-1 bg-gray-100 dark:bg-white/10 rounded-full text-xs font-mono text-gray-600 dark:text-gray-400">
                       {user.role}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 text-xs text-gray-500">
+                    {user.accountType || "manual"}
+                  </td>
+                  <td className="px-6 py-4 text-xs text-gray-500">
+                    {user.joinedAt
+                      ? new Date(user.joinedAt).toLocaleDateString()
+                      : "-"}
                   </td>
                   <td className="px-6 py-4 text-right flex justify-end gap-2">
                     <button
@@ -121,13 +219,19 @@ export const AdminClients = () => {
 
       {/* Add User Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-akatech-card w-full max-w-md rounded-lg shadow-xl p-6 border border-gray-200 dark:border-white/10">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-akatech-card w-full max-w-md rounded-lg shadow-xl p-6 border border-gray-200 dark:border-white/10"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
               {newUser.id ? "Edit User" : "Add New User"}
             </h3>
             <form
-              onSubmit={handleAddUser}
+              onSubmit={handleRegister}
               className="space-y-4"
               aria-label={newUser.id ? "edit-user-form" : "add-user-form"}
             >
@@ -167,6 +271,31 @@ export const AdminClients = () => {
                   }
                 />
               </div>
+
+              {!newUser.id && (
+                <div>
+                  <label
+                    htmlFor="userPassword"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Password
+                  </label>
+                  <input
+                    id="userPassword"
+                    type="password"
+                    required={!newUser.id}
+                    placeholder={
+                      newUser.id ? "Leave blank to keep current" : ""
+                    }
+                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
+                    value={newUser.password || ""}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, password: e.target.value })
+                    }
+                  />
+                </div>
+              )}
+
               <div>
                 <label
                   htmlFor="userRole"

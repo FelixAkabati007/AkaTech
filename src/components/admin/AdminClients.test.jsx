@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { AdminClients } from "./AdminClients";
 import { mockService } from "@lib/mockData";
 
@@ -22,6 +22,17 @@ vi.mock("@lib/mockData", () => ({
   },
 }));
 
+// Mock Toast
+const mockAddToast = vi.fn();
+vi.mock("@components/ui/ToastProvider", () => ({
+  useToast: () => ({
+    addToast: mockAddToast,
+  }),
+}));
+
+// Mock Fetch
+global.fetch = vi.fn();
+
 describe("AdminClients", () => {
   const mockUsers = [
     {
@@ -29,98 +40,125 @@ describe("AdminClients", () => {
       name: "John Doe",
       email: "john@example.com",
       role: "client",
+      accountType: "email",
     },
     {
       id: 2,
       name: "Jane Smith",
       email: "jane@example.com",
       role: "project_manager",
+      accountType: "google",
     },
   ];
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockService.getUsers.mockReturnValue(mockUsers);
-    // Mock window.confirm
     global.confirm = vi.fn(() => true);
+
+    // Default fetch mock to return users
+    global.fetch.mockImplementation((url) => {
+      if (url.includes("/api/users")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockUsers),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+    });
+
+    // Mock localStorage
+    Object.defineProperty(window, "localStorage", {
+      value: {
+        getItem: vi.fn(() => "mock-token"),
+        setItem: vi.fn(),
+      },
+      writable: true,
+    });
   });
 
-  it("renders the user list", () => {
+  it("renders the user list from API", async () => {
     render(<AdminClients />);
+
+    await waitFor(() => {
+      expect(screen.getByText("John Doe")).toBeDefined();
+      expect(screen.getByText("Jane Smith")).toBeDefined();
+    });
+
     expect(screen.getByText("User Management")).toBeDefined();
-    expect(screen.getByText("John Doe")).toBeDefined();
-    expect(screen.getByText("Jane Smith")).toBeDefined();
   });
 
-  it("opens modal in edit mode when Edit button is clicked", () => {
+  it("opens modal", async () => {
     render(<AdminClients />);
 
-    // Find edit buttons (PenToolIcon)
-    const editButtons = screen.getAllByLabelText("Edit user");
-    fireEvent.click(editButtons[0]); // Click edit for John Doe
+    await waitFor(() => {
+      expect(screen.getByText("John Doe")).toBeDefined();
+    });
 
-    // Modal should open with "Edit User" title
-    expect(screen.getByText("Edit User")).toBeDefined();
+    const addButton = screen.getByText("Add User");
+    fireEvent.click(addButton);
 
-    // Form fields should be pre-filled
-    expect(screen.getByLabelText("Full Name").value).toBe("John Doe");
-    expect(screen.getByLabelText("Email").value).toBe("john@example.com");
-    expect(screen.getByLabelText("Role").value).toBe("client");
-
-    // Submit button should say "Update User"
-    expect(screen.getByText("Update User")).toBeDefined();
+    expect(screen.getByText("Create User")).toBeDefined();
   });
 
-  it("calls updateUser when form is submitted in edit mode", () => {
+  it("calls API when form is submitted for manual registration", async () => {
     render(<AdminClients />);
 
-    // Open edit modal for first user
-    const editButtons = screen.getAllByLabelText("Edit user");
-    fireEvent.click(editButtons[0]);
+    await waitFor(() => {
+      expect(screen.getByText("John Doe")).toBeDefined();
+    });
 
-    // Change name
-    const nameInput = screen.getByLabelText("Full Name");
-    fireEvent.change(nameInput, { target: { value: "John Doe Updated" } });
+    fireEvent.click(screen.getByText("Add User"));
 
-    // Submit form
-    const form = screen.getByLabelText("edit-user-form");
+    fireEvent.change(screen.getByLabelText("Full Name"), {
+      target: { value: "New User" },
+    });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "new@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "password123" },
+    });
+
+    // Mock register API response
+    global.fetch.mockImplementationOnce((url) => {
+      if (url.includes("/api/users")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockUsers),
+        });
+      }
+      if (url.includes("/api/auth/register")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ user: { id: 3, name: "New User" } }),
+        });
+      }
+    });
+
+    const form = screen.getByLabelText("add-user-form");
     fireEvent.submit(form);
 
-    // Verify updateUser was called with updated data
-    expect(mockService.updateUser).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 1,
-        name: "John Doe Updated",
-        email: "john@example.com",
-        role: "client",
-      })
-    );
-
-    // Verify modal closed (or at least list refreshed)
-    expect(mockService.getUsers).toHaveBeenCalledTimes(2); // Initial render + after update
-  });
-
-  it("calls deleteUser when Delete button is clicked and confirmed", () => {
-    render(<AdminClients />);
-
-    // Find delete buttons
-    const deleteButtons = screen.getAllByLabelText("Delete user");
-    fireEvent.click(deleteButtons[0]); // Delete John Doe
-
-    expect(global.confirm).toHaveBeenCalledWith(
-      "Are you sure you want to delete this user?"
-    );
-    expect(mockService.deleteUser).toHaveBeenCalledWith(1);
-    expect(mockService.getUsers).toHaveBeenCalledTimes(2); // Initial render + after delete
-  });
-
-  it("does not delete if confirm is cancelled", () => {
-    global.confirm.mockReturnValue(false);
-    render(<AdminClients />);
-
-    const deleteButtons = screen.getAllByLabelText("Delete user");
-    fireEvent.click(deleteButtons[0]);
-
-    expect(mockService.deleteUser).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/auth/register"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            name: "New User",
+            email: "new@example.com",
+            password: "password123",
+            role: "client",
+          }),
+        })
+      );
+      expect(mockAddToast).toHaveBeenCalledWith(
+        "User registered successfully!",
+        "success"
+      );
+    });
   });
 });

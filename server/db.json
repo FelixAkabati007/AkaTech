@@ -322,6 +322,56 @@
         "subId": "859d99ae-1a24-4411-8613-5cbb70789813"
       },
       "timestamp": "2025-12-23T14:07:26.404Z"
+    },
+    {
+      "id": "1ee12e6f-5639-4d49-a62d-1dba1d545c44",
+      "action": "SEND_NOTIFICATION",
+      "performedBy": "admin",
+      "details": {
+        "recipientId": "all",
+        "title": "Test Notification"
+      },
+      "timestamp": "2025-12-25T10:37:45.075Z"
+    },
+    {
+      "id": "fdd52bf4-34f3-400e-a6a9-184510e37232",
+      "action": "SEND_NOTIFICATION",
+      "performedBy": "admin",
+      "details": {
+        "recipientId": "ad4383d6-5299-4da9-871d-5d9599b4b31b",
+        "title": "Test Notification"
+      },
+      "timestamp": "2025-12-25T10:55:16.800Z"
+    },
+    {
+      "id": "4d6e601b-3bc2-46aa-974d-fd278be0c54a",
+      "action": "SEND_NOTIFICATION",
+      "performedBy": "admin",
+      "details": {
+        "recipientId": "ad4383d6-5299-4da9-871d-5d9599b4b31b",
+        "title": "Test Notification 2"
+      },
+      "timestamp": "2025-12-25T10:55:16.916Z"
+    },
+    {
+      "id": "c9d2de76-4c1b-4ffb-917c-94a566940680",
+      "action": "SEND_NOTIFICATION",
+      "performedBy": "admin",
+      "details": {
+        "recipientId": "8e41f839-8175-4f2f-a1d4-fd32bc8658b9",
+        "title": "Test Notification"
+      },
+      "timestamp": "2025-12-25T10:57:49.955Z"
+    },
+    {
+      "id": "9504cf64-264c-4f8b-8e0f-048a12c670c4",
+      "action": "SEND_NOTIFICATION",
+      "performedBy": "admin",
+      "details": {
+        "recipientId": "8e41f839-8175-4f2f-a1d4-fd32bc8658b9",
+        "title": "Test Notification 2"
+      },
+      "timestamp": "2025-12-25T10:57:49.996Z"
     }
   ],
   "users": [
@@ -333,6 +383,116 @@
       "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocLB1mDd6kpl_z6VM8iYL2uIVseJBu5UIT9A9nCqtOLOL_MxKyMh=s96-c",
       "role": "user",
       "joinedAt": "2025-12-24T19:15:11.380Z"
+    },
+    {
+      "id": "730fdfc4-d20f-4bc5-8cb5-c015b225019a",
+      "name": "Portal User",
+      "email": "portal_1766656480045@example.com",
+      "password": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "client",
+      "joinedAt": "2025-12-25T09:54:40.093Z",
+      "accountType": "Auto"
+    },
+    {
+      "id": "155359f5-9eda-4442-a1e7-063fe6473ac4",
+      "name": "Portal User",
+      "email": "portal_1766657095991@example.com",
+      "password": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "client",
+      "joinedAt": "2025-12-25T10:04:56.000Z",
+      "accountType": "Auto"
+    },
+    {
+      "id": "56415be3-c01a-4976-bf5f-ca88103ce1e8",
+      "name": "Portal User",
+      "email": "portal_1766657743875@example.com",
+      "password": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "client",
+      "joinedAt": "2025-12-25T10:15:43.880Z",
+      "accountType": "Auto"
+    },
+    {
+      "id": "d8ebb93f-2cb9-4239-bc47-602b01099c50",
+      "name": "Manual User",
+      "email": "manual_1766657764122@example.com",
+      "password": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "client",
+      "joinedAt": "2025-12-25T10:16:04.127Z",
+      "accountType": "manual"
+    },
+    {
+      "id": "ad4383d6-5299-4da9-871d-5d9599b4b31b",
+      "name": "Test User",
+      "email": "testuser_1766660116628@example.com",
+      "password": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "client",
+      "joinedAt": "2025-12-25T10:55:16.735Z",
+      "accountType": "Auto"
+    },
+    {
+      "id": "8e41f839-8175-4f2f-a1d4-fd32bc8658b9",
+      "name": "Test User",
+      "email": "testuser_1766660269800@example.com",
+      "password": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "client",
+      "joinedAt": "2025-12-25T10:57:49.889Z",
+      "accountType": "Auto"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "a3178926-d1fb-4c5f-a577-302aaba3713f",
+      "recipientId": "all",
+      "title": "Test Notification",
+      "message": "This is a verification test.",
+      "type": "info",
+      "timestamp": "2025-12-25T10:37:45.070Z",
+      "readBy": [
+        "8e41f839-8175-4f2f-a1d4-fd32bc8658b9",
+        "5dc236c6-2c8a-414c-b1da-4d09ff62177c"
+      ]
+    },
+    {
+      "id": "7c06752d-50ff-4d0a-9be6-597a307a73c8",
+      "recipientId": "ad4383d6-5299-4da9-871d-5d9599b4b31b",
+      "title": "Test Notification",
+      "message": "Hello World",
+      "type": "info",
+      "timestamp": "2025-12-25T10:55:16.780Z",
+      "readBy": [
+        "ad4383d6-5299-4da9-871d-5d9599b4b31b"
+      ]
+    },
+    {
+      "id": "1f0938cd-2c8f-4e19-b499-7c42d0c433ca",
+      "recipientId": "ad4383d6-5299-4da9-871d-5d9599b4b31b",
+      "title": "Test Notification 2",
+      "message": "Hello World 2",
+      "type": "info",
+      "timestamp": "2025-12-25T10:55:16.913Z",
+      "readBy": []
+    },
+    {
+      "id": "46ea5d3e-0133-431e-aa89-0c16bfc66f44",
+      "recipientId": "8e41f839-8175-4f2f-a1d4-fd32bc8658b9",
+      "title": "Test Notification",
+      "message": "Hello World",
+      "type": "info",
+      "timestamp": "2025-12-25T10:57:49.953Z",
+      "readBy": [
+        "8e41f839-8175-4f2f-a1d4-fd32bc8658b9"
+      ]
+    },
+    {
+      "id": "515bc571-d078-485d-8e20-3e90f172534b",
+      "recipientId": "8e41f839-8175-4f2f-a1d4-fd32bc8658b9",
+      "title": "Test Notification 2",
+      "message": "Hello World 2",
+      "type": "info",
+      "timestamp": "2025-12-25T10:57:49.993Z",
+      "readBy": [
+        "8e41f839-8175-4f2f-a1d4-fd32bc8658b9"
+      ]
     }
   ]
 }

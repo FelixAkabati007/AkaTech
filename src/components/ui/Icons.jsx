@@ -37,6 +37,8 @@ import {
   Download,
   Upload,
   Send,
+  Bell,
+  PenTool,
 } from "lucide-react";
 export const Icons = {
   Code,
@@ -77,4 +79,6 @@ export const Icons = {
   Download,
   Upload,
   Send,
+  Bell,
+  PenTool,
 };

@@ -68,7 +68,7 @@ app.use(bodyParser.json());
 // Rate Limiter
 const limiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 10, // limit each IP to 10 requests per windowMs
+  max: 300, // limit each IP to 300 requests per windowMs
   message: { error: "Too many requests, please try again later." },
 });
 app.use("/api/", limiter);
@@ -92,6 +92,7 @@ const getDb = () => {
   if (!db.subscriptions) db.subscriptions = [];
   if (!db.auditLogs) db.auditLogs = [];
   if (!db.users) db.users = [];
+  if (!db.notifications) db.notifications = [];
   return db;
 };
 
@@ -162,7 +163,9 @@ app.post("/api/auth/google", async (req, res) => {
   if (!token) return res.status(400).json({ error: "Token required" });
 
   try {
-    const response = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${token}`);
+    const response = await fetch(
+      `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${token}`
+    );
     if (!response.ok) throw new Error("Failed to fetch user info");
     const googleUser = await response.json();
 
@@ -204,6 +207,63 @@ app.get("/api/auth/me", authenticateToken, (req, res) => {
     return res.status(404).json({ message: "User not found" });
   }
   res.json({ user });
+});
+
+// 0.2 Register User (Email/Password)
+app.post("/api/auth/register", (req, res) => {
+  const { name, email, password, role, accountType } = req.body;
+
+  if (!name || !email || !password) {
+    return res
+      .status(400)
+      .json({ error: "Name, email, and password are required." });
+  }
+
+  const db = getDb();
+  if (db.users.some((u) => u.email === email)) {
+    return res
+      .status(400)
+      .json({ error: "User already exists with this email." });
+  }
+
+  const hashedPassword = crypto
+    .createHash("sha256")
+    .update(password)
+    .digest("hex");
+
+  const newUser = {
+    id: crypto.randomUUID(),
+    name: xss(name),
+    email: xss(email),
+    password: hashedPassword,
+    role: role || "client", // Default to client
+    joinedAt: new Date().toISOString(),
+    accountType: accountType || "Auto",
+  };
+
+  db.users.push(newUser);
+  saveDb(db);
+
+  const token = jwt.sign(
+    { id: newUser.id, email: newUser.email, role: newUser.role },
+    SECRET_KEY,
+    { expiresIn: "24h" }
+  );
+
+  // Return user without password
+  const { password: _, ...userWithoutPassword } = newUser;
+
+  // Notify clients
+  io.emit("user_registered", userWithoutPassword);
+
+  res.status(201).json({ token, user: userWithoutPassword });
+});
+
+// 0.3 Get All Users (Admin)
+app.get("/api/users", authenticateToken, authorizeAdmin, (req, res) => {
+  const db = getDb();
+  const users = db.users.map(({ password, ...user }) => user);
+  res.json(users);
 });
 
 // 1. Client Message Submission
@@ -602,6 +662,73 @@ app.get("/api/audit-logs", authenticateToken, (req, res) => {
   res.json(db.auditLogs.reverse().slice(0, 100)); // Last 100 logs
 });
 
+// 9b. Get Client Notifications
+app.get("/api/notifications", authenticateToken, (req, res) => {
+  const db = getDb();
+  const userId = req.user.id;
+
+  const userNotifications = db.notifications
+    .filter((n) => n.recipientId === "all" || n.recipientId === userId)
+    .map((n) => ({
+      ...n,
+      read: n.readBy ? n.readBy.includes(userId) : false,
+      readBy: undefined, // Hide the list of other readers
+    }))
+    .reverse(); // Newest first
+
+  res.json(userNotifications);
+});
+
+// 9c. Mark Notification as Read
+app.patch("/api/notifications/:id/read", authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const db = getDb();
+
+  const notification = db.notifications.find((n) => n.id === id);
+  if (!notification) {
+    return res.status(404).json({ error: "Notification not found" });
+  }
+
+  if (
+    notification.recipientId !== "all" &&
+    notification.recipientId !== userId
+  ) {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+
+  if (!notification.readBy) notification.readBy = [];
+  if (!notification.readBy.includes(userId)) {
+    notification.readBy.push(userId);
+    saveDb(db);
+  }
+
+  res.json({ message: "Marked as read" });
+});
+
+// 9d. Mark All Notifications as Read
+app.patch("/api/notifications/read-all", authenticateToken, (req, res) => {
+  const userId = req.user.id;
+  const db = getDb();
+
+  let updatedCount = 0;
+  db.notifications.forEach((n) => {
+    if (n.recipientId === "all" || n.recipientId === userId) {
+      if (!n.readBy) n.readBy = [];
+      if (!n.readBy.includes(userId)) {
+        n.readBy.push(userId);
+        updatedCount++;
+      }
+    }
+  });
+
+  if (updatedCount > 0) {
+    saveDb(db);
+  }
+
+  res.json({ message: "All marked as read", count: updatedCount });
+});
+
 // 4. Update Status (Generic)
 app.patch("/api/:resource/:id", authenticateToken, (req, res) => {
   const { resource, id } = req.params;
@@ -663,6 +790,59 @@ app.delete("/api/:resource/:id", authenticateToken, (req, res) => {
   io.emit(`delete_${resource}`, id); // Notify clients
   res.json({ message: "Deleted successfully" });
 });
+
+// 9. Notifications System
+app.post(
+  "/api/notifications/send",
+  authenticateToken,
+  authorizeAdmin,
+  (req, res) => {
+    const { recipientId, title, message, type } = req.body;
+
+    if (!title || !message) {
+      return res.status(400).json({ error: "Title and message are required" });
+    }
+
+    const newNotification = {
+      id: crypto.randomUUID(),
+      recipientId: recipientId || "all",
+      title: xss(title),
+      message: xss(message),
+      type: xss(type || "info"),
+      timestamp: new Date().toISOString(),
+      readBy: [], // Track who read it if needed
+    };
+
+    const db = getDb();
+    db.notifications.push(newNotification);
+    saveDb(db);
+
+    // Broadcast via Socket.io
+    // If recipientId is 'all', emit to everyone
+    // If specific, we could use rooms, but for now we'll emit 'notification'
+    // and let the client filter or just show it if it matches their ID.
+    io.emit("notification", newNotification);
+
+    logAudit("SEND_NOTIFICATION", req.user.username, {
+      recipientId: newNotification.recipientId,
+      title: newNotification.title,
+    });
+
+    res.status(201).json(newNotification);
+  }
+);
+
+app.get(
+  "/api/notifications/history",
+  authenticateToken,
+  authorizeAdmin,
+  (req, res) => {
+    const db = getDb();
+    // Return last 50 notifications
+    const history = db.notifications.reverse().slice(0, 50);
+    res.json(history);
+  }
+);
 
 // 7. Send Direct Message (Outlook Integration)
 app.post("/api/send-email", authenticateToken, (req, res) => {

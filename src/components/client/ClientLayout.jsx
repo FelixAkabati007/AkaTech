@@ -17,42 +17,25 @@ export const ClientLayout = ({ user, onLogout }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
   const [notificationError, setNotificationError] = useState(null);
+  const [isMarkingAll, setIsMarkingAll] = useState(false);
   const notificationRef = useRef(null);
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        setNotifications([
-          {
-            id: 1,
-            title: "Welcome to AkaTech",
-            message: "Thanks for joining our platform!",
-            time: "2m ago",
-            read: false,
-            type: "info",
-          },
-          {
-            id: 2,
-            title: "Project Update",
-            message:
-              "Your project 'E-commerce Platform' status changed to In Progress.",
-            time: "1h ago",
-            read: false,
-            type: "success",
-          },
-          {
-            id: 3,
-            title: "System Maintenance",
-            message: "Scheduled maintenance on Saturday at 2 AM EST.",
-            time: "1d ago",
-            read: true,
-            type: "warning",
-          },
-        ]);
+        const token = localStorage.getItem("token");
+        const res = await fetch("http://localhost:3001/api/notifications", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) throw new Error("Failed to fetch");
+
+        const data = await res.json();
+        setNotifications(data);
       } catch (err) {
+        console.error("Notification fetch error:", err);
+        // Fallback to empty or keep error state
         setNotificationError("Failed to load notifications");
       } finally {
         setIsLoadingNotifications(false);
@@ -60,18 +43,50 @@ export const ClientLayout = ({ user, onLogout }) => {
     };
 
     fetchNotifications();
+
+    // Setup socket listener for real-time notifications could be done here too
+    // But for now, we'll stick to initial fetch
   }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const markAsRead = (id) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+  const markAsRead = async (id) => {
+    try {
+      const token = localStorage.getItem("token");
+      await fetch(`http://localhost:3001/api/notifications/${id}/read`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      );
+    } catch (err) {
+      console.error("Failed to mark read", err);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const markAllAsRead = async () => {
+    setIsMarkingAll(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(
+        "http://localhost:3001/api/notifications/read-all",
+        {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (!res.ok) throw new Error("Failed to mark all read");
+
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch (err) {
+      console.error("Failed to mark all read", err);
+      setNotificationError("Failed to update status");
+    } finally {
+      setIsMarkingAll(false);
+    }
   };
 
   // Close notifications on click outside
@@ -304,8 +319,17 @@ export const ClientLayout = ({ user, onLogout }) => {
                     {unreadCount > 0 && (
                       <button
                         onClick={markAllAsRead}
-                        className="text-xs text-akatech-gold hover:text-akatech-goldDark font-bold uppercase tracking-wider"
+                        disabled={isMarkingAll}
+                        aria-label="Mark all notifications as read"
+                        className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors ${
+                          isMarkingAll
+                            ? "text-gray-400 cursor-not-allowed"
+                            : "text-akatech-gold hover:text-akatech-goldDark focus:outline-none focus:underline"
+                        }`}
                       >
+                        {isMarkingAll && (
+                          <Icons.Loader className="w-3 h-3 animate-spin" />
+                        )}
                         Mark all read
                       </button>
                     )}

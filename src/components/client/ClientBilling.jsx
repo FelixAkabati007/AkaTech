@@ -16,6 +16,7 @@ export const ClientBilling = ({ user }) => {
     subject: "Invoice Request",
     message: "",
   });
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
   const [paymentDetails, setPaymentDetails] = useState({
     cardNumber: "",
     expiry: "",
@@ -78,16 +79,23 @@ export const ClientBilling = ({ user }) => {
 
   const handleRequestInvoice = (e) => {
     e.preventDefault();
-    mockService.createTicket({
-      clientId: user.id,
-      subject: requestData.subject,
-      priority: "Medium",
-      message: requestData.message,
-      sender: "Client",
-    });
-    setIsModalOpen(false);
-    setRequestData({ subject: "Invoice Request", message: "" });
-    // In a real app, show a toast notification here
+    setIsSubmittingRequest(true);
+
+    // Simulate API call
+    setTimeout(() => {
+      mockService.createTicket({
+        clientId: user.id,
+        subject: requestData.subject,
+        priority: "Medium",
+        message: requestData.message,
+        sender: "Client",
+      });
+
+      setIsSubmittingRequest(false);
+      setIsModalOpen(false);
+      setRequestData({ subject: "Invoice Request", message: "" });
+      alert("Invoice request submitted successfully!");
+    }, 1500);
   };
 
   const handlePayNow = (invoice) => {

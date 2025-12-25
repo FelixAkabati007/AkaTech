@@ -1,0 +1,6 @@
+filter.lfs.clean=git-lfs clean -- %f
+filter.lfs.smudge=git-lfs smudge -- %f
+filter.lfs.process=git-lfs filter-process
+filter.lfs.required=true
+user.name=FelixAkabati
+user.email=129680272+FelixAkabati007@users.noreply.github.com
