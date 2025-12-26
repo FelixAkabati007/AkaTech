@@ -8,6 +8,7 @@ const {
   signupProgress,
   tickets,
   subscriptions,
+  invoices,
 } = require("./db/schema.cjs");
 const { eq, desc, and, or } = require("drizzle-orm");
 
@@ -323,6 +324,48 @@ module.exports = {
   deleteSubscription: async (id) => {
     if (!db) return;
     await db.delete(subscriptions).where(eq(subscriptions.id, id));
+  },
+
+  // Invoices
+  createInvoice: async (invoiceData) => {
+    if (!db) return null;
+    const result = await db.insert(invoices).values(invoiceData).returning();
+    return result[0];
+  },
+
+  getAllInvoices: async () => {
+    if (!db) return [];
+    return await db.select().from(invoices).orderBy(desc(invoices.createdAt));
+  },
+
+  getInvoicesByUserId: async (userId) => {
+    if (!db) return [];
+    return await db
+      .select()
+      .from(invoices)
+      .where(eq(invoices.userId, userId))
+      .orderBy(desc(invoices.createdAt));
+  },
+
+  getInvoiceById: async (id) => {
+    if (!db) return null;
+    const result = await db.select().from(invoices).where(eq(invoices.id, id));
+    return result[0];
+  },
+
+  updateInvoice: async (id, data) => {
+    if (!db) return null;
+    const result = await db
+      .update(invoices)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(invoices.id, id))
+      .returning();
+    return result[0];
+  },
+
+  deleteInvoice: async (id) => {
+    if (!db) return;
+    await db.delete(invoices).where(eq(invoices.id, id));
   },
 
   // Email Verifications & Progress

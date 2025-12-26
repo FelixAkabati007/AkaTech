@@ -100,6 +100,20 @@ const subscriptions = pgTable("subscriptions", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+const invoices = pgTable("invoices", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  referenceNumber: text("reference_number").unique().notNull(),
+  userId: uuid("user_id").references(() => users.id),
+  projectId: uuid("project_id").references(() => projects.id), // Optional if not linked to project yet
+  customProjectName: text("custom_project_name"), // For manual project entry
+  amount: text("amount"), // Using text to avoid precision issues or for flexibility
+  status: text("status").default("requested"), // requested, draft, sent, paid, overdue, cancelled
+  dueDate: timestamp("due_date"),
+  description: text("description"), // For the request message
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 module.exports = {
   users,
   projects,
@@ -109,4 +123,5 @@ module.exports = {
   signupProgress,
   tickets,
   subscriptions,
+  invoices,
 };

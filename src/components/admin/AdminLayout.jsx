@@ -225,8 +225,18 @@ export const AdminLayout = ({ user, onLogout }) => {
                 </p>
                 <p className="text-xs text-gray-500">{user.role || "Admin"}</p>
               </div>
-              <div className="w-10 h-10 bg-akatech-gold rounded-full flex items-center justify-center text-black font-bold ring-2 ring-white/10 shadow-lg group-hover:shadow-akatech-gold/20 transition-all">
-                {user.avatar}
+              <div className="w-10 h-10 bg-akatech-gold rounded-full flex items-center justify-center text-black font-bold ring-2 ring-white/10 shadow-lg group-hover:shadow-akatech-gold/20 transition-all overflow-hidden relative">
+                <span className="absolute inset-0 flex items-center justify-center">
+                  {user.name?.charAt(0).toUpperCase()}
+                </span>
+                {user.avatarUrl && (
+                  <img
+                    src={user.avatarUrl}
+                    alt={`${user.name}'s profile`}
+                    className="w-full h-full object-cover relative z-10"
+                    onError={(e) => (e.target.style.display = "none")}
+                  />
+                )}
               </div>
               <Icons.ChevronRight
                 className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${

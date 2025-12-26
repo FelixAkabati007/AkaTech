@@ -2,8 +2,10 @@ import React, { useState, useEffect } from "react";
 import { Icons } from "@components/ui/Icons";
 import { mockService } from "@lib/mockData";
 import { jsPDF } from "jspdf";
+import { useToast } from "@components/ui/ToastProvider";
 
 export const ClientBilling = ({ user }) => {
+  const { addToast } = useToast();
   const [invoices, setInvoices] = useState([]);
   const [filteredInvoices, setFilteredInvoices] = useState([]);
   const [filterStatus, setFilterStatus] = useState("All");
@@ -15,7 +17,9 @@ export const ClientBilling = ({ user }) => {
   const [requestData, setRequestData] = useState({
     subject: "Invoice Request",
     message: "",
+    projectId: "",
   });
+  const [projects, setProjects] = useState([]);
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
   const [paymentDetails, setPaymentDetails] = useState({
     cardNumber: "",
@@ -24,10 +28,56 @@ export const ClientBilling = ({ user }) => {
   });
 
   useEffect(() => {
-    const data = mockService.getInvoices(user.id);
-    setInvoices(data);
-    setFilteredInvoices(data);
-  }, [user.id]);
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const headers = { Authorization: `Bearer ${token}` };
+
+        const [invRes, projRes] = await Promise.all([
+          fetch("/api/client/invoices", { headers }),
+          fetch(`/api/client/projects?email=${user.email}`, { headers }),
+        ]);
+
+        if (invRes.ok) {
+          const data = await invRes.json();
+          const mapped = data.map((inv) => ({
+            id: inv.referenceNumber || inv.id,
+            projectId: inv.projectId,
+            customProjectName: inv.customProjectName,
+            amount: parseFloat(inv.amount || 0),
+            status: inv.status.charAt(0).toUpperCase() + inv.status.slice(1),
+            date: new Date(inv.createdAt).toLocaleDateString(),
+            dueDate: inv.dueDate
+              ? new Date(inv.dueDate).toLocaleDateString()
+              : "Pending",
+            description: inv.description,
+          }));
+          setInvoices(mapped);
+          setFilteredInvoices(mapped);
+        } else {
+          // Fallback to mock if API fails
+          const data = mockService.getInvoices(user.id);
+          setInvoices(data);
+          setFilteredInvoices(data);
+        }
+
+        if (projRes.ok) {
+          const data = await projRes.json();
+          setProjects(data);
+        } else {
+          setProjects(mockService.getProjects());
+        }
+      } catch (e) {
+        console.error(e);
+        // Fallback
+        const data = mockService.getInvoices(user.id);
+        setInvoices(data);
+        setFilteredInvoices(data);
+        setProjects(mockService.getProjects());
+      }
+    };
+    fetchData();
+  }, [user.id, user.email]);
 
   useEffect(() => {
     if (filterStatus === "All") {
@@ -38,6 +88,14 @@ export const ClientBilling = ({ user }) => {
       );
     }
   }, [filterStatus, invoices]);
+
+  const getProjectTitle = (invoice) => {
+    if (invoice.projectId) {
+      const project = projects.find((p) => p.id === invoice.projectId);
+      return project ? project.title || project.name : "Unknown Project";
+    }
+    return invoice.customProjectName || "Unknown Project";
+  };
 
   const handleDownloadInvoice = (invoice) => {
     setIsDownloading(true);
@@ -58,9 +116,7 @@ export const ClientBilling = ({ user }) => {
         doc.text(`Date: ${invoice.date}`, 10, 60);
         doc.text(`Due Date: ${invoice.dueDate}`, 10, 70);
 
-        const project =
-          mockService.getProjects().find((p) => p.id === invoice.projectId)
-            ?.title || "Unknown Project";
+        const project = getProjectTitle(invoice);
         doc.text(`Project: ${project}`, 10, 80);
 
         doc.text(`Amount: GH₵ ${invoice.amount.toFixed(2)}`, 10, 100);
@@ -70,32 +126,73 @@ export const ClientBilling = ({ user }) => {
         doc.save(`Invoice-${invoice.id}.pdf`);
       } catch (error) {
         console.error("Error generating PDF:", error);
-        alert("Failed to generate invoice PDF. Please try again.");
+        addToast("Failed to generate invoice PDF. Please try again.", "error");
       } finally {
         setIsDownloading(false);
       }
     }, 100);
   };
 
-  const handleRequestInvoice = (e) => {
+  const handleRequestInvoice = async (e) => {
     e.preventDefault();
+    if (!requestData.projectId) {
+      addToast("Please select a project", "error");
+      return;
+    }
+    if (!requestData.message.trim()) {
+      addToast("Please provide details for the invoice", "error");
+      return;
+    }
+
     setIsSubmittingRequest(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      mockService.createTicket({
-        clientId: user.id,
-        subject: requestData.subject,
-        priority: "Medium",
-        message: requestData.message,
-        sender: "Client",
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/invoices/request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          subject: requestData.subject,
+          message: requestData.message,
+          projectId: requestData.projectId,
+        }),
       });
 
+      const data = await res.json();
+
+      if (res.ok) {
+        addToast("Invoice request submitted successfully!", "success");
+        setIsModalOpen(false);
+        setRequestData({
+          subject: "Invoice Request",
+          message: "",
+          projectId: "",
+        });
+
+        const newInvoice = data.invoice;
+        const mapped = {
+          id: newInvoice.referenceNumber || newInvoice.id,
+          projectId: newInvoice.projectId,
+          amount: parseFloat(newInvoice.amount || 0),
+          status:
+            newInvoice.status.charAt(0).toUpperCase() +
+            newInvoice.status.slice(1),
+          date: new Date(newInvoice.createdAt).toLocaleDateString(),
+          dueDate: "Pending",
+          description: requestData.message,
+        };
+        setInvoices((prev) => [mapped, ...prev]);
+      } else {
+        addToast(data.error || "Failed to submit request", "error");
+      }
+    } catch (e) {
+      addToast("Error submitting request", "error");
+    } finally {
       setIsSubmittingRequest(false);
-      setIsModalOpen(false);
-      setRequestData({ subject: "Invoice Request", message: "" });
-      alert("Invoice request submitted successfully!");
-    }, 1500);
+    }
   };
 
   const handlePayNow = (invoice) => {
@@ -196,6 +293,38 @@ export const ClientBilling = ({ user }) => {
                   disabled
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white cursor-not-allowed"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Project
+                </label>
+                <select
+                  required
+                  value={requestData.projectId}
+                  onChange={(e) =>
+                    setRequestData({
+                      ...requestData,
+                      projectId: e.target.value,
+                    })
+                  }
+                  className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
+                >
+                  <option
+                    value=""
+                    className="text-gray-900 bg-white dark:bg-akatech-card"
+                  >
+                    Select a project
+                  </option>
+                  {projects.map((p) => (
+                    <option
+                      key={p.id}
+                      value={p.id}
+                      className="text-gray-900 bg-white dark:bg-akatech-card"
+                    >
+                      {p.title || p.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -394,10 +523,7 @@ export const ClientBilling = ({ user }) => {
                       {invoice.id}
                     </td>
                     <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                      {mockService
-                        .getProjects()
-                        .find((p) => p.id === invoice.projectId)?.title ||
-                        "Unknown Project"}
+                      {getProjectTitle(invoice)}
                     </td>
                     <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
                       {invoice.date}

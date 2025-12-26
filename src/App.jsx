@@ -110,6 +110,8 @@ export default function App() {
         localStorage.setItem("token", data.token);
         setUser(data.user);
         setAuthModalOpen(false);
+        // Correctly route to dashboard for both admin and client
+        // The Dashboard component handles the inner routing based on role
         setView("dashboard");
       });
   };
@@ -164,6 +166,7 @@ export default function App() {
       onScriptLoadError={() =>
         console.error("Google Sign-In script failed to load")
       }
+      language="en"
     >
       <div className={`min-h-screen ${mode} transition-colors duration-300`}>
         <Analytics />

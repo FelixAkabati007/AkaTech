@@ -14,6 +14,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const { OAuth2Client } = require("google-auth-library");
 const dal = require("./dal.cjs");
+const { sendLoginNotification } = require("./emailService.cjs");
 
 // --- Load .env manually (Removed: dotenv handles this) ---
 // const envPath = path.join(__dirname, "../.env");
@@ -66,7 +67,7 @@ const logAudit = async (action, performedBy, details) => {
 };
 
 // --- Auth Middleware ---
-const authenticateToken = (req, res, next) => {
+const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
@@ -75,11 +76,8 @@ const authenticateToken = (req, res, next) => {
       .status(401)
       .json({ error: "Unauthorized", message: "No token provided" });
 
-  jwt.verify(token, SECRET_KEY, async (err, decoded) => {
-    if (err)
-      return res
-        .status(403)
-        .json({ error: "Forbidden", message: "Invalid or expired token" });
+  try {
+    const decoded = jwt.verify(token, SECRET_KEY);
 
     // Fetch latest user data from DB to ensure role is up-to-date
     const user = await dal.getUserById(decoded.id);
@@ -92,7 +90,15 @@ const authenticateToken = (req, res, next) => {
 
     req.user = user;
     next();
-  });
+  } catch (err) {
+    if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
+      return res
+        .status(403)
+        .json({ error: "Forbidden", message: "Invalid or expired token" });
+    }
+    console.error("Auth Middleware Error:", err);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 const authorizeAdmin = (req, res, next) => {
@@ -157,6 +163,12 @@ app.post("/api/signup/verify-google", async (req, res) => {
         .status(400)
         .json({ error: "Email not found in Google profile" });
 
+    // Special Admin Logic for felixakabati007@gmail.com
+    let role = "client";
+    if (googleUser.email === "felixakabati007@gmail.com") {
+      role = "admin";
+    }
+
     let user = await dal.getUserByEmail(googleUser.email);
 
     if (!user) {
@@ -166,17 +178,40 @@ app.post("/api/signup/verify-google", async (req, res) => {
         email: googleUser.email,
         name: googleUser.name,
         avatarUrl: googleUser.picture,
-        role: "client",
+        role: role,
         accountType: "google",
         passwordHash: null, // No password initially
       });
       await logAudit("USER_REGISTER_GOOGLE", user.id, { email: user.email });
     } else {
       // Existing user
+      const updates = {};
       if (!user.googleId) {
-        await dal.updateUser(user.id, { googleId: googleUser.sub });
+        updates.googleId = googleUser.sub;
+      }
+      // Always update avatar if provided by Google
+      if (googleUser.picture && user.avatarUrl !== googleUser.picture) {
+        updates.avatarUrl = googleUser.picture;
+        user.avatarUrl = googleUser.picture; // Update local object
+      }
+      // Enforce admin role for specific email if not already set
+      if (role === "admin" && user.role !== "admin") {
+        updates.role = "admin";
+        user.role = "admin"; // Update local object for token
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await dal.updateUser(user.id, updates);
       }
       await logAudit("USER_LOGIN_GOOGLE", user.id, { email: user.email });
+    }
+
+    // Send security notification for admin login
+    if (user.role === "admin") {
+      // Intentionally not awaiting to avoid blocking response
+      sendLoginNotification(user.email, req.ip, req.get("User-Agent")).catch(
+        console.error
+      );
     }
 
     const sessionToken = jwt.sign(
@@ -370,6 +405,174 @@ app.post("/api/projects", async (req, res) => {
 
   io.emit("new_project", { ...newProject, notes: xss(notes || "") });
   res.status(201).json({ message: "Project request received." });
+});
+
+// 1g. Invoice Request Submission
+app.post("/api/invoices/request", authenticateToken, async (req, res) => {
+  const { subject, message, projectId } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: "Message/Description is required." });
+  }
+
+  // Generate Reference Number
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const randomSuffix = crypto.randomBytes(2).toString("hex").toUpperCase();
+  const referenceNumber = `REQ-${dateStr}-${randomSuffix}`;
+
+  try {
+    const newInvoice = await dal.createInvoice({
+      referenceNumber,
+      userId: req.user.id,
+      projectId: projectId || null,
+      amount: "0.00", // Placeholder until admin sets it
+      status: "requested",
+      description: encrypt(xss(message)),
+      dueDate: null, // Admin sets this
+    });
+
+    await logAudit("INVOICE_REQUEST", req.user.id, {
+      referenceNumber,
+      projectId,
+    });
+
+    // Notify Admin
+    io.emit("new_invoice_request", {
+      ...newInvoice,
+      description: message,
+      user: { name: req.user.name, email: req.user.email },
+    });
+
+    res.status(201).json({
+      message: "Invoice request submitted successfully.",
+      invoice: { ...newInvoice, description: message },
+    });
+  } catch (error) {
+    console.error("Invoice Request Error:", error);
+    res.status(500).json({ error: "Failed to submit invoice request." });
+  }
+});
+
+// 1h. Get Client Invoices
+app.get("/api/client/invoices", authenticateToken, async (req, res) => {
+  try {
+    const invoices = await dal.getInvoicesByUserId(req.user.id);
+    const decryptedInvoices = invoices.map((inv) => ({
+      ...inv,
+      description: inv.description ? decrypt(inv.description) : "",
+    }));
+    res.json(decryptedInvoices);
+  } catch (error) {
+    console.error("Get Invoices Error:", error);
+    res.status(500).json({ error: "Failed to fetch invoices." });
+  }
+});
+
+// 1i. Get Admin Invoices
+app.get("/api/admin/invoices", authenticateToken, async (req, res) => {
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+  try {
+    const invoices = await dal.getAllInvoices();
+    const decryptedInvoices = invoices.map((inv) => ({
+      ...inv,
+      description: inv.description ? decrypt(inv.description) : "",
+    }));
+    res.json(decryptedInvoices);
+  } catch (error) {
+    console.error("Get Admin Invoices Error:", error);
+    res.status(500).json({ error: "Failed to fetch invoices." });
+  }
+});
+
+// 1j. Create Admin Invoice
+app.post("/api/admin/invoices", authenticateToken, async (req, res) => {
+  if (req.user.role !== "admin")
+    return res.status(403).json({ error: "Unauthorized" });
+  try {
+    const {
+      projectId,
+      customProjectName,
+      amount,
+      dueDate,
+      description,
+      status,
+    } = req.body;
+
+    // Find project to get user ID
+    // We don't have getProjectById in DAL exported directly?
+    // dal.getAllProjects() is there.
+    // Or we can just store without userId if nullable?
+    // Schema says userId references users.id. It doesn't say notNull(). So nullable.
+
+    const referenceNumber = `INV-${Date.now()}`;
+
+    const newInvoice = await dal.createInvoice({
+      referenceNumber,
+      projectId: projectId === "others" ? null : projectId || null,
+      customProjectName: projectId === "others" ? customProjectName : null,
+      amount: amount.toString(),
+      status: status || "Sent",
+      dueDate: dueDate ? new Date(dueDate) : null,
+      description: description ? encrypt(description) : "",
+    });
+
+    // Notify user if project/user linked? (Optional for now)
+
+    res.status(201).json(newInvoice);
+  } catch (error) {
+    console.error("Create Invoice Error:", error);
+    res.status(500).json({ error: "Failed to create invoice" });
+  }
+});
+
+// 1k. Update Admin Invoice
+app.patch("/api/admin/invoices/:id", authenticateToken, async (req, res) => {
+  if (req.user.role !== "admin")
+    return res.status(403).json({ error: "Unauthorized" });
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    if (updates.description) {
+      updates.description = encrypt(updates.description);
+    }
+
+    if (updates.projectId === "others") {
+      updates.projectId = null;
+    } else if (updates.projectId) {
+      updates.customProjectName = null;
+    }
+
+    const updatedInvoice = await dal.updateInvoice(id, updates);
+    res.json(updatedInvoice);
+  } catch (error) {
+    console.error("Update Invoice Error:", error);
+    res.status(500).json({ error: "Failed to update invoice" });
+  }
+});
+
+// 1l. Delete Admin Invoice
+app.delete("/api/admin/invoices/:id", authenticateToken, async (req, res) => {
+  if (req.user.role !== "admin")
+    return res.status(403).json({ error: "Unauthorized" });
+  try {
+    const { id } = req.params;
+
+    const invoice = await dal.getInvoiceById(id);
+    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+
+    if (invoice.status === "Paid" || invoice.status === "paid") {
+      return res.status(400).json({ error: "Cannot delete a paid invoice" });
+    }
+
+    await dal.deleteInvoice(id);
+    res.json({ message: "Invoice deleted" });
+  } catch (error) {
+    console.error("Delete Invoice Error:", error);
+    res.status(500).json({ error: "Failed to delete invoice" });
+  }
 });
 
 // 1c. Support Ticket Submission

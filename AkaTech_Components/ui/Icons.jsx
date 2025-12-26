@@ -43,6 +43,9 @@ import {
   Twitter,
   Instagram,
   Linkedin,
+  Edit,
+  Trash2,
+  Eye,
   Cookie,
   Search,
   Upload,
@@ -105,6 +108,9 @@ export const Icons = {
   Loader,
   Folder,
   AlertTriangle,
+  Edit,
+  Trash2,
+  Eye,
   Google: (props) => (
     <svg
       {...props}

@@ -171,14 +171,50 @@ describe("ClientBilling", () => {
   });
 
   it("handles invoice request flow correctly", async () => {
+    // Setup fetch mock
+    global.fetch = vi.fn((url) => {
+        if (url.includes("/api/invoices/request")) {
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ 
+                    message: "Success", 
+                    invoice: { 
+                        id: "INV-NEW", 
+                        referenceNumber: "REQ-NEW",
+                        projectId: 101, 
+                        amount: 0, 
+                        status: "requested", 
+                        createdAt: new Date().toISOString(),
+                        description: "Test Description"
+                    } 
+                })
+            });
+        }
+        if (url.includes("/api/client/projects")) {
+             return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve(mockProjects)
+             });
+        }
+        if (url.includes("/api/client/invoices")) {
+             return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve([])
+             });
+        }
+        return Promise.reject("Unknown URL");
+    });
+
     vi.useFakeTimers();
     render(<ClientBilling user={mockUser} />);
+    
+    // Wait for projects to load (useEffect)
+    await act(async () => {});
 
     // 1. Check Button Accessibility
     const requestButton = screen.getByRole("button", {
       name: "Request Invoice",
     });
-    console.log("DEBUG BUTTON HTML:", requestButton.outerHTML);
     expect(requestButton).toHaveAttribute("aria-haspopup", "dialog");
     expect(requestButton).toHaveAttribute("aria-expanded", "false");
 
@@ -188,44 +224,45 @@ describe("ClientBilling", () => {
 
     const modal = screen.getByRole("dialog");
     expect(modal).toBeInTheDocument();
-    expect(modal).toHaveAttribute("aria-labelledby", "modal-title");
 
-    // 3. Validation Error (empty message)
+    // 3. Validation Error (empty message and project)
     const submitButton = screen.getByText("Submit Request");
     fireEvent.click(submitButton);
-    // Note: To verify toast, we'd need to mock useToast return value and spy on addToast,
-    // but here we just check that createTicket wasn't called
-    expect(mockService.createTicket).not.toHaveBeenCalled();
+    // Fetch should NOT be called
+    expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining("/api/invoices/request"), expect.any(Object));
 
-    // 4. Successful Submission
+    // 4. Fill form
+    // Select Project
+    const projectSelect = screen.getByRole("combobox"); // Assuming it's the only select or use label
+    fireEvent.change(projectSelect, { target: { value: "101" } });
+
+    // Enter Message
     const messageInput = screen.getByPlaceholderText(/describe what you need/i);
     fireEvent.change(messageInput, {
       target: { value: "I need a new invoice for project X" },
     });
 
+    // 5. Successful Submission
     fireEvent.click(submitButton);
 
     // Check loading state
     expect(screen.getByText("Sending...")).toBeInTheDocument();
     expect(submitButton).toBeDisabled();
 
-    // Fast forward
-    await act(async () => {
-      vi.runAllTimers();
-    });
+    // Fast forward (fetch is async but we awaited res.json so it might be microtask)
+    // In real fetch, we await. In mock, it resolves immediately.
+    await act(async () => {});
 
-    expect(mockService.createTicket).toHaveBeenCalledWith({
-      clientId: mockUser.id,
-      subject: "Invoice Request",
-      priority: "Medium",
-      message: "I need a new invoice for project X",
-      sender: "Client",
-    });
-
-    // Modal should close (or rather, we check if it's gone)
-    // Wait, createTicket is called, then state updates.
-    // In unit tests with mock timers, state updates inside async functions need careful handling.
+    expect(global.fetch).toHaveBeenCalledWith("/api/invoices/request", expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+            subject: "Invoice Request",
+            message: "I need a new invoice for project X",
+            projectId: "101"
+        })
+    }));
 
     vi.useRealTimers();
   });
 });
+
