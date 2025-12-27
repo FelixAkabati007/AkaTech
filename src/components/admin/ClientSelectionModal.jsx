@@ -6,6 +6,7 @@ export const ClientSelectionModal = ({
   isOpen,
   onClose,
   onSelect,
+  onDelete,
   clients,
   isLoading = false,
 }) => {
