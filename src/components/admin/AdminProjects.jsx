@@ -108,6 +108,26 @@ export const AdminProjects = () => {
     setIsClientModalOpen(false);
   };
 
+  const handleClientDelete = (clientId) => {
+    if (
+      window.confirm(
+        "Are you sure you want to delete this client? This action cannot be undone and will remove all associated projects."
+      )
+    ) {
+      setIsLoadingClients(true);
+      // Simulate network request for deletion
+      setTimeout(() => {
+        const success = localDataService.deleteUser(clientId);
+        if (success) {
+          loadData();
+        } else {
+          setIsLoadingClients(false);
+          alert("Failed to delete client.");
+        }
+      }, 500);
+    }
+  };
+
   return (
     <div className="p-8 space-y-6">
       <div className="flex justify-between items-center">
