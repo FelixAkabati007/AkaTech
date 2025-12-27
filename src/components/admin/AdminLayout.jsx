@@ -2,7 +2,6 @@ import React, { useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icons } from "@components/ui/Icons";
 import { Logo } from "@components/ui/Logo";
-import { getApiUrl } from "@lib/config";
 
 import { AdminDashboard } from "./AdminDashboard";
 import { AdminClients } from "./AdminClients";
@@ -24,7 +23,7 @@ export const AdminLayout = ({ user, onLogout }) => {
   React.useEffect(() => {
     const loginAdmin = async () => {
       try {
-        const res = await fetch(`${getApiUrl()}/login`, {
+        const res = await fetch("http://localhost:3001/api/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username: "admin", password: "admin123" }),
@@ -226,18 +225,8 @@ export const AdminLayout = ({ user, onLogout }) => {
                 </p>
                 <p className="text-xs text-gray-500">{user.role || "Admin"}</p>
               </div>
-              <div className="w-10 h-10 bg-akatech-gold rounded-full flex items-center justify-center text-black font-bold ring-2 ring-white/10 shadow-lg group-hover:shadow-akatech-gold/20 transition-all overflow-hidden relative">
-                <span className="absolute inset-0 flex items-center justify-center">
-                  {user.name?.charAt(0).toUpperCase()}
-                </span>
-                {user.avatarUrl && (
-                  <img
-                    src={user.avatarUrl}
-                    alt={`${user.name}'s profile`}
-                    className="w-full h-full object-cover relative z-10"
-                    onError={(e) => (e.target.style.display = "none")}
-                  />
-                )}
+              <div className="w-10 h-10 bg-akatech-gold rounded-full flex items-center justify-center text-black font-bold ring-2 ring-white/10 shadow-lg group-hover:shadow-akatech-gold/20 transition-all">
+                {user.avatar}
               </div>
               <Icons.ChevronRight
                 className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${

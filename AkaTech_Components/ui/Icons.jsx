@@ -43,9 +43,6 @@ import {
   Twitter,
   Instagram,
   Linkedin,
-  Edit,
-  Trash2,
-  Eye,
   Cookie,
   Search,
   Upload,
@@ -53,6 +50,9 @@ import {
   Loader,
   Folder,
   AlertTriangle,
+  ArrowUp,
+  Edit,
+  Trash2,
 } from "lucide-react";
 
 export const Icons = {
@@ -108,9 +108,9 @@ export const Icons = {
   Loader,
   Folder,
   AlertTriangle,
+  ArrowUp,
   Edit,
   Trash2,
-  Eye,
   Google: (props) => (
     <svg
       {...props}

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Icons } from "@components/ui/Icons";
-import { localDataService } from "@lib/localData";
+import { mockService } from "@lib/mockData";
 import { jsPDF } from "jspdf";
 import { useToast } from "@components/ui/ToastProvider";
-import { getApiUrl } from "@lib/config";
 
 export const ClientBilling = ({ user }) => {
   const { addToast } = useToast();
@@ -34,19 +33,33 @@ export const ClientBilling = ({ user }) => {
         const token = localStorage.getItem("token");
         const headers = { Authorization: `Bearer ${token}` };
 
-        const [invRes, projRes] = await Promise.all([
-          fetch(`${getApiUrl()}/client/invoices`, { headers }),
-          fetch(`${getApiUrl()}/client/projects?email=${user.email}`, {
-            headers,
-          }),
+        // Helper to safely fetch JSON
+        const safeFetch = async (url) => {
+          try {
+            const res = await fetch(url, { headers });
+            const contentType = res.headers.get("content-type");
+            if (
+              res.ok &&
+              contentType &&
+              contentType.includes("application/json")
+            ) {
+              return await res.json();
+            }
+          } catch (err) {
+            console.warn(`Fetch failed for ${url}, falling back to mock.`);
+          }
+          return null;
+        };
+
+        const [invData, projData] = await Promise.all([
+          safeFetch("/api/client/invoices"),
+          safeFetch(`/api/client/projects?email=${user.email}`),
         ]);
 
-        if (invRes.ok) {
-          const data = await invRes.json();
-          const mapped = data.map((inv) => ({
+        if (invData) {
+          const mapped = invData.map((inv) => ({
             id: inv.referenceNumber || inv.id,
             projectId: inv.projectId,
-            customProjectName: inv.customProjectName,
             amount: parseFloat(inv.amount || 0),
             status: inv.status.charAt(0).toUpperCase() + inv.status.slice(1),
             date: new Date(inv.createdAt).toLocaleDateString(),
@@ -59,24 +72,23 @@ export const ClientBilling = ({ user }) => {
           setFilteredInvoices(mapped);
         } else {
           // Fallback to mock if API fails
-          const data = localDataService.getInvoices(user.id);
+          const data = mockService.getInvoices(user.id);
           setInvoices(data);
           setFilteredInvoices(data);
         }
 
-        if (projRes.ok) {
-          const data = await projRes.json();
-          setProjects(data);
+        if (projData) {
+          setProjects(projData);
         } else {
-          setProjects(localDataService.getProjects());
+          setProjects(mockService.getProjects());
         }
       } catch (e) {
         console.error(e);
         // Fallback
-        const data = localDataService.getInvoices(user.id);
+        const data = mockService.getInvoices(user.id);
         setInvoices(data);
         setFilteredInvoices(data);
-        setProjects(localDataService.getProjects());
+        setProjects(mockService.getProjects());
       }
     };
     fetchData();
@@ -91,14 +103,6 @@ export const ClientBilling = ({ user }) => {
       );
     }
   }, [filterStatus, invoices]);
-
-  const getProjectTitle = (invoice) => {
-    if (invoice.projectId) {
-      const project = projects.find((p) => p.id === invoice.projectId);
-      return project ? project.title || project.name : "Unknown Project";
-    }
-    return invoice.customProjectName || "Unknown Project";
-  };
 
   const handleDownloadInvoice = (invoice) => {
     setIsDownloading(true);
@@ -119,7 +123,9 @@ export const ClientBilling = ({ user }) => {
         doc.text(`Date: ${invoice.date}`, 10, 60);
         doc.text(`Due Date: ${invoice.dueDate}`, 10, 70);
 
-        const project = getProjectTitle(invoice);
+        const project =
+          projects.find((p) => p.id === invoice.projectId)?.title ||
+          "Unknown Project";
         doc.text(`Project: ${project}`, 10, 80);
 
         doc.text(`Amount: GH₵ ${invoice.amount.toFixed(2)}`, 10, 100);
@@ -151,7 +157,7 @@ export const ClientBilling = ({ user }) => {
 
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${getApiUrl()}/client/invoices/request`, {
+      const res = await fetch("/api/invoices/request", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -526,7 +532,10 @@ export const ClientBilling = ({ user }) => {
                       {invoice.id}
                     </td>
                     <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                      {getProjectTitle(invoice)}
+                      {mockService
+                        .getProjects()
+                        .find((p) => p.id === invoice.projectId)?.title ||
+                        "Unknown Project"}
                     </td>
                     <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
                       {invoice.date}
@@ -590,4 +599,3 @@ export const ClientBilling = ({ user }) => {
     </div>
   );
 };
-

@@ -24,27 +24,24 @@ export default defineConfig({
       "Referrer-Policy": "no-referrer-when-downgrade",
     },
   },
-  preview: {
-    host: true,
-    port: 4173,
-    headers: {
-      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
-      "Cross-Origin-Embedder-Policy": "unsafe-none",
-      "Cross-Origin-Resource-Policy": "cross-origin",
-    },
-  },
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ["react", "react-dom", "framer-motion"],
-          ui: ["lucide-react", "clsx", "tailwind-merge"],
-          spline: ["@splinetool/react-spline", "@splinetool/runtime"],
-          pdf: ["jspdf", "html2canvas"],
-          realtime: ["socket.io-client"],
-        },
+        // manualChunks: {
+        //   vendor: ["react", "react-dom", "framer-motion"],
+        //   ui: ["lucide-react", "clsx", "tailwind-merge"],
+        //   spline: ["@splinetool/react-spline", "@splinetool/runtime"],
+        //   pdf: ["jspdf", "html2canvas"],
+        //   realtime: ["socket.io-client"],
+        // },
       },
     },
-    chunkSizeWarningLimit: 2500,
+    chunkSizeWarningLimit: 1000,
+  },
+  test: {
+    globals: true,
+    environment: "happy-dom",
+    setupFiles: "./vitest.setup.js",
+    css: true,
   },
 });

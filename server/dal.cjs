@@ -31,9 +31,9 @@ const createUser = async (userData) => {
   return result[0];
 };
 
-const getAllUsers = async (limit = 50, offset = 0) => {
+const getAllUsers = async () => {
   if (!db) return [];
-  return await db.select().from(users).limit(limit).offset(offset);
+  return await db.select().from(users);
 };
 
 // Projects
@@ -43,14 +43,9 @@ const createProject = async (projectData) => {
   return result[0];
 };
 
-const getAllProjects = async (limit = 50, offset = 0) => {
+const getAllProjects = async () => {
   if (!db) return [];
-  return await db
-    .select()
-    .from(projects)
-    .orderBy(desc(projects.createdAt))
-    .limit(limit)
-    .offset(offset);
+  return await db.select().from(projects).orderBy(desc(projects.createdAt));
 };
 
 const getProjectsByEmail = async (email) => {
@@ -65,14 +60,9 @@ const createMessage = async (messageData) => {
   return result[0];
 };
 
-const getAllMessages = async (limit = 50, offset = 0) => {
+const getAllMessages = async () => {
   if (!db) return [];
-  return await db
-    .select()
-    .from(messages)
-    .orderBy(desc(messages.createdAt))
-    .limit(limit)
-    .offset(offset);
+  return await db.select().from(messages).orderBy(desc(messages.createdAt));
 };
 
 const deleteMessage = async (id) => {
@@ -87,7 +77,7 @@ const createNotification = async (notifData) => {
   return result[0];
 };
 
-const getNotificationsByUserId = async (userId, limit = 50, offset = 0) => {
+const getNotificationsByUserId = async (userId) => {
   if (!db) return [];
   return await db
     .select()
@@ -95,9 +85,7 @@ const getNotificationsByUserId = async (userId, limit = 50, offset = 0) => {
     .where(
       or(eq(notifications.userId, userId), eq(notifications.target, "all"))
     )
-    .orderBy(desc(notifications.createdAt))
-    .limit(limit)
-    .offset(offset);
+    .orderBy(desc(notifications.createdAt));
 };
 
 // Audit Logs
@@ -106,14 +94,9 @@ const createAuditLog = async (logData) => {
   await db.insert(auditLogs).values(logData);
 };
 
-const getAllAuditLogs = async (limit = 50, offset = 0) => {
+const getAllAuditLogs = async () => {
   if (!db) return [];
-  return await db
-    .select()
-    .from(auditLogs)
-    .orderBy(desc(auditLogs.createdAt))
-    .limit(limit)
-    .offset(offset);
+  return await db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt));
 };
 
 // Signup Progress
@@ -196,14 +179,12 @@ module.exports = {
   // Notifications
   createNotification,
   getNotificationsByUserId,
-  getAllNotifications: async (limit = 50, offset = 0) => {
+  getAllNotifications: async () => {
     if (!db) return [];
     return await db
       .select()
       .from(notifications)
-      .orderBy(desc(notifications.createdAt))
-      .limit(limit)
-      .offset(offset);
+      .orderBy(desc(notifications.createdAt));
   },
 
   // Audit Logs
@@ -271,14 +252,9 @@ module.exports = {
     return result[0];
   },
 
-  getAllTickets: async (limit = 50, offset = 0) => {
+  getAllTickets: async () => {
     if (!db) return [];
-    return await db
-      .select()
-      .from(tickets)
-      .orderBy(desc(tickets.createdAt))
-      .limit(limit)
-      .offset(offset);
+    return await db.select().from(tickets).orderBy(desc(tickets.createdAt));
   },
 
   getTicketsByEmail: async (email) => {

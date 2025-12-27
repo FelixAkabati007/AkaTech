@@ -15,52 +15,18 @@ export const AuthModal = ({
   const [isLoginView, setIsLoginView] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const { addToast } = useToast();
   const modalRef = useRef(null);
 
   const googleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
+    onSuccess: (tokenResponse) => {
       if (onGoogleLogin) {
-        setIsGoogleLoading(true);
-        try {
-          await onGoogleLogin(tokenResponse);
-          addToast("Signed in with Google", "success");
-        } catch (error) {
-          console.error("Google Login Error:", error);
-          addToast(error.message || "Google Sign In Failed", "error");
-        } finally {
-          setIsGoogleLoading(false);
-        }
+        onGoogleLogin(tokenResponse);
+        addToast("Signed in with Google", "success");
       }
     },
-    onError: (errorResponse) => {
-      console.error("Google Login Failed:", errorResponse);
-      addToast("Google Sign In Failed. Please try again.", "error");
-      setIsGoogleLoading(false);
-    },
-    onNonOAuthError: (nonOAuthError) => {
-      console.error("Non-OAuth Error:", nonOAuthError);
-      // Handle popup closed or blocked
-      addToast("Login cancelled or popup blocked.", "info");
-      setIsGoogleLoading(false);
-    },
-    flow: "implicit", // Explicitly state flow, though implicit is default
+    onError: () => addToast("Google Sign In Failed", "error"),
   });
-
-  const handleGoogleClick = () => {
-    if (isGoogleLoading) return;
-    setIsGoogleLoading(true);
-    // Add a small delay/check or just call it.
-    // If popup is blocked, it might fail immediately.
-    try {
-      googleLogin();
-    } catch (err) {
-      console.error("Failed to trigger Google Login", err);
-      setIsGoogleLoading(false);
-      addToast("Failed to initialize Google Login", "error");
-    }
-  };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -184,26 +150,12 @@ export const AuthModal = ({
             </div>
 
             <button
-              onClick={handleGoogleClick}
-              disabled={isGoogleLoading}
-              className={`w-full bg-white text-gray-700 py-3 mb-6 flex items-center justify-center gap-3 hover:bg-gray-50 transition border border-gray-300 shadow-sm rounded-md relative ${
-                isGoogleLoading ? "opacity-70 cursor-not-allowed" : ""
-              }`}
-              aria-label={
-                isLoginView ? "Sign in with Google" : "Sign up with Google"
-              }
+              onClick={() => googleLogin()}
+              className="w-full bg-gray-50 dark:bg-white text-black py-3 mb-6 flex items-center justify-center gap-3 hover:bg-gray-100 dark:hover:bg-gray-200 transition border border-gray-200 dark:border-transparent"
             >
-              {isGoogleLoading ? (
-                <div className="w-5 h-5 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <Icons.Google className="w-5 h-5" />
-              )}
-              <span className="text-sm font-medium font-roboto tracking-wide">
-                {isGoogleLoading
-                  ? "Connecting..."
-                  : isLoginView
-                  ? "Sign in with Google"
-                  : "Sign up with Google"}
+              <Icons.Google className="w-5 h-5" />
+              <span className="text-xs font-bold uppercase tracking-wider">
+                {isLoginView ? "Sign in with Google" : "Sign up with Google"}
               </span>
             </button>
 

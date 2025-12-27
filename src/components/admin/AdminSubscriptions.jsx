@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Icons } from "@components/ui/Icons";
 import { PRICING_PACKAGES } from "../../lib/data";
-import { getApiUrl } from "@lib/config";
+import { localDataService } from "@lib/localData";
 
-const API_URL = getApiUrl();
+const API_URL = "http://localhost:3001/api";
 
 export const AdminSubscriptions = () => {
   const [subscriptions, setSubscriptions] = useState([]);
@@ -34,8 +34,12 @@ export const AdminSubscriptions = () => {
       setSubscriptions(data.data);
       setTotal(data.total);
     } catch (err) {
-      console.error("Failed to fetch subscriptions", err);
-      showNotification("Failed to fetch subscriptions", "error");
+      console.warn("API unavailable, switching to offline mode:", err.message);
+      // Fallback to local data
+      const localData = localDataService.getSubscriptions();
+      setSubscriptions(localData);
+      setTotal(localData.length);
+      // showNotification("Running in offline mode", "info");
     } finally {
       setLoading(false);
     }
@@ -320,4 +324,3 @@ export const AdminSubscriptions = () => {
     </div>
   );
 };
-

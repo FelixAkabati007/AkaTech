@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { Icons } from "../../components/ui/Icons";
+import { Icons } from "@components/ui/Icons";
 import { AnimatePresence, motion } from "framer-motion";
 import { format } from "date-fns";
 import { io } from "socket.io-client";
-import { getApiUrl, getSocketUrl } from "@lib/config";
+import { localDataService } from "@lib/localData";
 
 // --- API Helper ---
-const API_URL = getApiUrl();
+const API_URL = "http://localhost:3001/api";
 
 /**
  * AdminMessages Component
@@ -143,7 +143,7 @@ export const AdminMessages = () => {
 
   // --- Real-time Sync ---
   useEffect(() => {
-    const socket = io(getSocketUrl());
+    const socket = io("http://localhost:3001");
 
     socket.on("connect", () => console.log("Socket connected"));
 
@@ -200,8 +200,11 @@ export const AdminMessages = () => {
         data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
       );
     } catch (err) {
-      console.error("Fetch messages failed", err);
-      setError("Failed to load messages. Please ensure the server is running.");
+      console.warn("API unavailable, switching to offline mode:", err.message);
+      // Fallback to local data
+      const localData = localDataService.getMessages();
+      setMessages(localData);
+      // setError("Failed to load messages. Please ensure the server is running.");
     } finally {
       setLoading(false);
     }
@@ -224,7 +227,7 @@ export const AdminMessages = () => {
           console.warn(
             "API /clients endpoint not found. The server might need a restart."
           );
-          setClients([]);
+          setClients(localDataService.getUsers());
           return;
         }
         throw new Error(`Server error: ${res.status}`);
@@ -240,9 +243,13 @@ export const AdminMessages = () => {
       const data = await res.json();
       setClients(data);
     } catch (err) {
-      console.error("Fetch clients failed", err);
+      console.warn(
+        "API unavailable for clients, using local data:",
+        err.message
+      );
       // Don't block the whole UI for clients failure
       // setError("Failed to load clients.");
+      setClients(localDataService.getUsers());
     }
   };
 

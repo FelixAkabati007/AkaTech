@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icons } from "@components/ui/Icons";
 import { useToast } from "@components/ui/ToastProvider";
-import { getApiUrl } from "@lib/config";
 
 export const ClientSupport = ({ user }) => {
   const { addToast } = useToast();
@@ -21,7 +20,9 @@ export const ClientSupport = ({ user }) => {
     if (!user?.email) return;
     try {
       const res = await fetch(
-        `${getApiUrl()}/client/tickets?email=${encodeURIComponent(user.email)}`
+        `http://localhost:3001/api/client/tickets?email=${encodeURIComponent(
+          user.email
+        )}`
       );
       if (res.ok) {
         const data = await res.json();
@@ -43,7 +44,7 @@ export const ClientSupport = ({ user }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${getApiUrl()}/tickets`, {
+      const res = await fetch("http://localhost:3001/api/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -69,7 +70,7 @@ export const ClientSupport = ({ user }) => {
 
     try {
       const res = await fetch(
-        `${getApiUrl()}/client/tickets/${selectedTicket.id}`,
+        `http://localhost:3001/api/client/tickets/${selectedTicket.id}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },

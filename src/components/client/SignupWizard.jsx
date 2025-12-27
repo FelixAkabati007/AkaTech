@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { GoogleLogin } from "@react-oauth/google";
-import { Icons } from "../ui/Icons";
+import { Icons } from "@components/ui/Icons";
 import { PRICING_PACKAGES } from "../../lib/data";
-import { getApiUrl } from "@lib/config";
 
-const API_URL = getApiUrl();
+const API_URL = "http://localhost:3001/api";
 
 const StepPackageSelection = ({ selectedPackage, onSelect }) => {
   return (
