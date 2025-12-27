@@ -2,6 +2,7 @@ import React, { useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icons } from "@components/ui/Icons";
 import { Logo } from "@components/ui/Logo";
+import { ConnectionStatus } from "../shared/ConnectionStatus";
 
 import { AdminDashboard } from "./AdminDashboard";
 import { AdminClients } from "./AdminClients";
@@ -211,89 +212,96 @@ export const AdminLayout = ({ user, onLogout }) => {
             </h2>
           </div>
 
-          <div className="relative">
-            <button
-              onClick={() => setIsProfileOpen(!isProfileOpen)}
-              aria-expanded={isProfileOpen}
-              aria-haspopup="true"
-              aria-label="User menu"
-              className="flex items-center gap-4 hover:bg-gray-100 dark:hover:bg-white/5 p-2 rounded-lg transition-colors group outline-none focus:ring-2 focus:ring-akatech-gold"
-            >
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-akatech-gold transition-colors">
-                  {user.name}
-                </p>
-                <p className="text-xs text-gray-500">{user.role || "Admin"}</p>
-              </div>
-              <div className="w-10 h-10 bg-akatech-gold rounded-full flex items-center justify-center text-black font-bold ring-2 ring-white/10 shadow-lg group-hover:shadow-akatech-gold/20 transition-all">
-                {user.avatar}
-              </div>
-              <Icons.ChevronRight
-                className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${
-                  isProfileOpen ? "rotate-90" : ""
-                }`}
-              />
-            </button>
+          <div className="flex items-center gap-4">
+            <ConnectionStatus />
+            <div className="relative">
+              <button
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                aria-expanded={isProfileOpen}
+                aria-haspopup="true"
+                aria-label="User menu"
+                className="flex items-center gap-4 hover:bg-gray-100 dark:hover:bg-white/5 p-2 rounded-lg transition-colors group outline-none focus:ring-2 focus:ring-akatech-gold"
+              >
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-akatech-gold transition-colors">
+                    {user.name}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {user.role || "Admin"}
+                  </p>
+                </div>
+                <div className="w-10 h-10 bg-akatech-gold rounded-full flex items-center justify-center text-black font-bold ring-2 ring-white/10 shadow-lg group-hover:shadow-akatech-gold/20 transition-all">
+                  {user.avatar}
+                </div>
+                <Icons.ChevronRight
+                  className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${
+                    isProfileOpen ? "rotate-90" : ""
+                  }`}
+                />
+              </button>
 
-            <AnimatePresence>
-              {isProfileOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setIsProfileOpen(false)}
-                  />
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    transition={{ duration: 0.2 }}
-                    className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-akatech-card rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden z-50"
-                  >
-                    <div className="p-4 border-b border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-white/5">
-                      <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
-                        {user.name}
-                      </p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {user.email || "admin@akatech.com"}
-                      </p>
-                    </div>
-                    <div role="menu" aria-label="User profile options">
-                      <div className="p-2">
-                        <button
-                          role="menuitem"
-                          onClick={() => {
-                            setActiveTab("profile");
-                            setIsProfileOpen(false);
-                          }}
-                          className="w-full flex items-center gap-3 p-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-akatech-gold transition-colors focus:outline-none focus:bg-gray-100 dark:focus:bg-white/5"
-                        >
-                          <Icons.User className="w-4 h-4" /> Profile
-                        </button>
-                        <button
-                          role="menuitem"
-                          onClick={() => {
-                            setActiveTab("settings");
-                            setIsProfileOpen(false);
-                          }}
-                          className="w-full flex items-center gap-3 p-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-akatech-gold transition-colors focus:outline-none focus:bg-gray-100 dark:focus:bg-white/5"
-                        >
-                          <Icons.Settings className="w-4 h-4" /> Settings
-                        </button>
+              <AnimatePresence>
+                {isProfileOpen && (
+                  <>
+                    <div
+                      key="backdrop"
+                      className="fixed inset-0 z-40"
+                      onClick={() => setIsProfileOpen(false)}
+                    />
+                    <motion.div
+                      key="dropdown"
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.2 }}
+                      className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-akatech-card rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden z-50"
+                    >
+                      <div className="p-4 border-b border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-white/5">
+                        <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
+                          {user.name}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {user.email || "admin@akatech.com"}
+                        </p>
                       </div>
-                      <div className="p-2 border-t border-gray-200 dark:border-white/5">
-                        <button
-                          role="menuitem"
-                          onClick={onLogout}
-                          className="w-full flex items-center gap-3 p-2 rounded-lg text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors focus:outline-none focus:bg-red-50 dark:focus:bg-red-900/10"
-                        >
-                          <Icons.LogOut className="w-4 h-4" /> Sign Out
-                        </button>
+                      <div role="menu" aria-label="User profile options">
+                        <div className="p-2">
+                          <button
+                            role="menuitem"
+                            onClick={() => {
+                              setActiveTab("profile");
+                              setIsProfileOpen(false);
+                            }}
+                            className="w-full flex items-center gap-3 p-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-akatech-gold transition-colors focus:outline-none focus:bg-gray-100 dark:focus:bg-white/5"
+                          >
+                            <Icons.User className="w-4 h-4" /> Profile
+                          </button>
+                          <button
+                            role="menuitem"
+                            onClick={() => {
+                              setActiveTab("settings");
+                              setIsProfileOpen(false);
+                            }}
+                            className="w-full flex items-center gap-3 p-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-akatech-gold transition-colors focus:outline-none focus:bg-gray-100 dark:focus:bg-white/5"
+                          >
+                            <Icons.Settings className="w-4 h-4" /> Settings
+                          </button>
+                        </div>
+                        <div className="p-2 border-t border-gray-200 dark:border-white/5">
+                          <button
+                            role="menuitem"
+                            onClick={onLogout}
+                            className="w-full flex items-center gap-3 p-2 rounded-lg text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors focus:outline-none focus:bg-red-50 dark:focus:bg-red-900/10"
+                          >
+                            <Icons.LogOut className="w-4 h-4" /> Sign Out
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </header>
         <div className="p-4 md:p-8 max-w-7xl mx-auto">

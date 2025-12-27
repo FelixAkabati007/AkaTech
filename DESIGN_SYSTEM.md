@@ -72,3 +72,34 @@ We leverage Tailwind's utility-first approach but abstract common patterns into 
   <h2 className="text-gradient-gold font-serif">Premium Service</h2>
 </div>
 ```
+
+## Components
+
+### ConnectionStatus
+
+A visual indicator of the application's network connectivity status.
+
+**Location**: `src/components/shared/ConnectionStatus.jsx`
+
+**Props**: None.
+
+**Features**:
+- **Automatic Detection**: Monitors `window.navigator.onLine` and performs periodic heartbeat checks (HEAD request to origin).
+- **Visual Feedback**:
+  - **Online**: Green (`#4CAF50`) dot.
+  - **Offline**: Red (`#F44336`) dot.
+  - **Tooltip**: Displays "Online" or "Offline" on hover.
+- **Accessibility**: Includes `role="status"`, `aria-live="polite"`, and dynamic `aria-label`.
+
+**Usage**:
+
+```jsx
+import { ConnectionStatus } from '../shared/ConnectionStatus';
+
+const Header = () => (
+  <header>
+    <ConnectionStatus />
+    {/* Other header content */}
+  </header>
+);
+```
