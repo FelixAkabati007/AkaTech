@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 
-// Initial Mock Data
+// Initial Local Data
 export const initialUsers = [
   {
     id: 1,
@@ -269,7 +269,7 @@ export const initialSubscriptions = [
 ];
 
 // Simple simulation of a database service
-class MockService {
+class LocalDataService {
   constructor() {
     // Load from localStorage or use initial data
     this.users = JSON.parse(localStorage.getItem("users")) || initialUsers;
@@ -334,7 +334,7 @@ class MockService {
   }
 
   syncGoogleAvatar(userId) {
-    // Mock Google Avatar URL
+    // Local Google Avatar URL
     const googleAvatar =
       "https://lh3.googleusercontent.com/a/default-user=s96-c";
     this.users = this.users.map((u) =>
@@ -527,4 +527,4 @@ class MockService {
   }
 }
 
-export const mockService = new MockService();
+export const localDataService = new LocalDataService();

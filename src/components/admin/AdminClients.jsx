@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Icons } from "@components/ui/Icons";
-import { mockService } from "@lib/mockData";
+import { localDataService } from "@lib/localData";
 import { useToast } from "@components/ui/ToastProvider";
 import { io } from "socket.io-client";
 import { getApiUrl, getSocketUrl } from "@lib/config";
@@ -31,11 +31,11 @@ export const AdminClients = () => {
       } else {
         // Fallback to mock if API fails or not admin
         console.warn("Failed to fetch users, falling back to mock data");
-        setUsers(mockService.getUsers());
+        setUsers(localDataService.getUsers());
       }
     } catch (error) {
       console.error("Error fetching users:", error);
-      setUsers(mockService.getUsers());
+      setUsers(localDataService.getUsers());
     }
   }, []);
 
@@ -107,8 +107,8 @@ export const AdminClients = () => {
   const handleDeleteUser = (id) => {
     if (window.confirm("Are you sure you want to delete this user?")) {
       // API call to delete user would go here
-      mockService.deleteUser(id);
-      setUsers(mockService.getUsers());
+      localDataService.deleteUser(id);
+      setUsers(localDataService.getUsers());
       addToast("User deleted (mock)", "info");
     }
   };
@@ -340,3 +340,4 @@ export const AdminClients = () => {
     </div>
   );
 };
+

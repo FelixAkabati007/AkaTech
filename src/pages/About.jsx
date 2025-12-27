@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Icons } from "@components/ui/Icons";
 import { PORTFOLIO_DATA } from "../lib/data";
-import { mockService } from "../lib/mockData";
+import { localDataService } from "../lib/localData";
 
 export const About = () => {
   const [locked, setLocked] = useState({});
@@ -12,7 +12,7 @@ export const About = () => {
   useEffect(() => {
     const checkSubscriptionStatus = () => {
       try {
-        const subscriptions = mockService.getSubscriptions();
+        const subscriptions = localDataService.getSubscriptions();
         const active = subscriptions.some((sub) => sub.status === "active");
         setHasActiveSubscription(active);
         setSyncError(null);
@@ -248,3 +248,4 @@ export const About = () => {
     </div>
   );
 };
+

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Icons } from "@components/ui/Icons";
 import { AvatarUpload } from "@components/ui/AvatarUpload";
-import { mockService } from "@lib/mockData";
+import { localDataService } from "@lib/localData";
 
 export const AdminProfile = ({ user }) => {
   const [profile, setProfile] = useState(user);
@@ -20,24 +20,24 @@ export const AdminProfile = ({ user }) => {
 
   const handleProfileUpdate = (e) => {
     e.preventDefault();
-    mockService.updateUser(formData);
+    localDataService.updateUser(formData);
     setProfile(formData);
     setIsEditing(false);
     // In a real app, you would show a success toast here
   };
 
   const handleAvatarUpload = (dataUrl) => {
-    const newAvatar = mockService.updateAvatar(user.id, dataUrl);
+    const newAvatar = localDataService.updateAvatar(user.id, dataUrl);
     setProfile({ ...profile, avatarUrl: newAvatar });
   };
 
   const handleGoogleSync = () => {
-    const newAvatar = mockService.syncGoogleAvatar(user.id);
+    const newAvatar = localDataService.syncGoogleAvatar(user.id);
     setProfile({ ...profile, avatarUrl: newAvatar });
   };
 
   const handleRemoveAvatar = () => {
-    mockService.updateAvatar(user.id, null);
+    localDataService.updateAvatar(user.id, null);
     setProfile({ ...profile, avatarUrl: null });
   };
 
@@ -213,3 +213,4 @@ export const AdminProfile = ({ user }) => {
     </div>
   );
 };
+

@@ -38,7 +38,22 @@ const SECRET_KEY = "akatech-super-secret-key-change-in-prod";
 
 // --- Middleware ---
 app.use(compression());
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "img-src": [
+          "'self'",
+          "data:",
+          "https://*.googleusercontent.com",
+          "https://lh3.googleusercontent.com",
+        ],
+      },
+    },
+  })
+);
 app.use(
   cors({
     origin: true, // Reflect request origin

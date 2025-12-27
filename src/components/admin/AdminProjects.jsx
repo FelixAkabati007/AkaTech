@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Icons } from "@components/ui/Icons";
-import { mockService } from "@lib/mockData";
+import { localDataService } from "@lib/localData";
 
 /**
  * AdminProjects Component
@@ -10,7 +10,7 @@ import { mockService } from "@lib/mockData";
  * - List view of all projects with status and phase indicators
  * - Create/Edit functionality via modal
  * - Delete capability
- * - Integration with mockService for data persistence
+ * - Integration with localDataService for data persistence
  */
 export const AdminProjects = () => {
   // State for project list and UI controls
@@ -37,8 +37,8 @@ export const AdminProjects = () => {
    * Loads projects and clients from the service
    */
   const loadData = () => {
-    setProjects(mockService.getProjects());
-    setClients(mockService.getUsers().filter((u) => u.role === "Client"));
+    setProjects(localDataService.getProjects());
+    setClients(localDataService.getUsers().filter((u) => u.role === "Client"));
   };
 
   /**
@@ -74,14 +74,14 @@ export const AdminProjects = () => {
       id: currentProject ? currentProject.id : undefined,
     };
 
-    mockService.saveProject(projectData);
+    localDataService.saveProject(projectData);
     loadData();
     setIsModalOpen(false);
   };
 
   const handleDelete = (id) => {
     if (window.confirm("Are you sure you want to delete this project?")) {
-      mockService.deleteProject(id);
+      localDataService.deleteProject(id);
       loadData();
     }
   };
@@ -316,3 +316,4 @@ export const AdminProjects = () => {
     </div>
   );
 };
+

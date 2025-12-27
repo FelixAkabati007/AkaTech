@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Icons } from "@components/ui/Icons";
 import { Card } from "@components/ui/Card";
-import { mockService } from "@lib/mockData";
+import { localDataService } from "@lib/localData";
 
 export const AdminDashboard = () => {
   const [stats, setStats] = useState({
@@ -17,9 +17,9 @@ export const AdminDashboard = () => {
         // Simulate network delay
         await new Promise((resolve) => setTimeout(resolve, 500));
 
-        const projects = mockService.getProjects();
-        const tickets = mockService.getTickets();
-        const subscriptions = mockService.getSubscriptions();
+        const projects = localDataService.getProjects();
+        const tickets = localDataService.getTickets();
+        const subscriptions = localDataService.getSubscriptions();
 
         // Calculate revenue from subscriptions
         const subscriptionRevenue = subscriptions.reduce((acc, sub) => {
@@ -28,7 +28,7 @@ export const AdminDashboard = () => {
         }, 0);
 
         setStats({
-          totalUsers: mockService.getUsers().length,
+          totalUsers: localDataService.getUsers().length,
           activeProjects: projects.filter(
             (p) => p.status !== "completed" && p.status !== "rejected"
           ).length,
@@ -198,3 +198,4 @@ export const AdminDashboard = () => {
     </div>
   );
 };
+

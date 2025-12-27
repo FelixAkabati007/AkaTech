@@ -3,12 +3,14 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "start:server": "node server/server.cjs",
     "build": "vite build",
-    "preview": "vite preview",
-    "test": "vitest"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
@@ -32,7 +34,7 @@
     "framer-motion": "^12.23.26",
     "google-auth-library": "^10.5.0",
     "helmet": "^8.1.0",
-    "imap-simple": "^5.1.0",
+    "imap-simple": "^1.6.3",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^3.0.4",
     "lucide-react": "^0.561.0",
@@ -51,16 +53,10 @@
     "xss": "^1.0.15"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.1",
-    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^25.0.3",
     "@vitejs/plugin-react": "^5.1.2",
-    "drizzle-kit": "^0.31.8",
-    "happy-dom": "^20.0.11",
-    "jsdom": "^27.3.0",
+    "drizzle-kit": "^0.18.1",
     "typescript": "^5.9.3",
-    "vite": "^7.3.0",
-    "vitest": "^4.0.16"
+    "vite": "^7.3.0"
   }
 }

@@ -84,7 +84,7 @@ export const AdminSubscriptions = () => {
 
   const handleExport = async () => {
     try {
-      const data = mockService.getSubscriptions();
+      const data = localDataService.getSubscriptions();
       const csvContent =
         "data:text/csv;charset=utf-8," +
         ["User,Email,Plan,Status,Start Date,End Date,Amount"]
@@ -320,3 +320,4 @@ export const AdminSubscriptions = () => {
     </div>
   );
 };
+

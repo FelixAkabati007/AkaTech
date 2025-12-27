@@ -24,6 +24,15 @@ export default defineConfig({
       "Referrer-Policy": "no-referrer-when-downgrade",
     },
   },
+  preview: {
+    host: true,
+    port: 4173,
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+      "Cross-Origin-Embedder-Policy": "unsafe-none",
+      "Cross-Origin-Resource-Policy": "cross-origin",
+    },
+  },
   build: {
     rollupOptions: {
       output: {
@@ -37,11 +46,5 @@ export default defineConfig({
       },
     },
     chunkSizeWarningLimit: 2500,
-  },
-  test: {
-    globals: true,
-    environment: "happy-dom",
-    setupFiles: "./vitest.setup.js",
-    css: true,
   },
 });

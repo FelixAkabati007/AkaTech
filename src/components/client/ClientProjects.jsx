@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icons } from "@components/ui/Icons";
 import ProjectEmptyState from "./ProjectEmptyState";
+import { localDataService } from "@lib/localData";
 import { getApiUrl } from "@lib/config";
 
 export const ClientProjects = ({ user }) => {
@@ -15,47 +16,13 @@ export const ClientProjects = ({ user }) => {
   const fetchProjects = async () => {
     if (!user?.email) return;
     try {
-      const res = await fetch(
-        `${getApiUrl()}/client/projects?email=${encodeURIComponent(user.email)}`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        // Map API data to UI structure
-        const mappedProjects = data.map((p) => ({
-          id: p.id,
-          title: `${p.plan} Project`, // Use plan as title for now
-          description: p.notes || "No details provided.",
-          status:
-            p.status === "pending"
-              ? "Initiation"
-              : p.status === "in-progress"
-              ? "In Progress"
-              : p.status === "completed"
-              ? "Completed"
-              : p.status,
-          currentPhase:
-            p.status === "pending" ? "Request Review" : "Active Development",
-          phases: [
-            // Mock phases for now as backend doesn't support them yet
-            {
-              name: "Request Received",
-              status: "Completed",
-              date: new Date(p.timestamp).toLocaleDateString(),
-            },
-            {
-              name: "Review",
-              status: p.status === "pending" ? "In Progress" : "Completed",
-              date: "-",
-            },
-            {
-              name: "Development",
-              status: p.status === "in-progress" ? "In Progress" : "Pending",
-              date: "-",
-            },
-          ],
-          files: [], // Backend doesn't support files yet
-        }));
-        setProjects(mappedProjects);
+      // Fetch user to get ID (in case the prop doesn't have it)
+      const users = localDataService.getUsers();
+      const currentUser = users.find((u) => u.email === user.email);
+
+      if (currentUser) {
+        const data = localDataService.getProjects(currentUser.id);
+        setProjects(data);
       }
     } catch (err) {
       console.error("Failed to fetch projects", err);
@@ -64,7 +31,8 @@ export const ClientProjects = ({ user }) => {
 
   useEffect(() => {
     fetchProjects();
-    const interval = setInterval(fetchProjects, 10000);
+    // Listen for local data updates if needed, or just poll
+    const interval = setInterval(fetchProjects, 5000);
     return () => clearInterval(interval);
   }, [user.email]);
 
@@ -137,32 +105,51 @@ export const ClientProjects = ({ user }) => {
                 key={project.id}
                 layoutId={`project-${project.id}`}
                 onClick={() => setSelectedProject(project)}
-                className={`p-6 rounded-lg border cursor-pointer transition-all ${
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                className={`p-6 rounded-xl border cursor-pointer transition-all duration-300 group ${
                   selectedProject?.id === project.id
-                    ? "bg-white dark:bg-akatech-card border-akatech-gold shadow-md"
-                    : "bg-white dark:bg-akatech-card border-gray-200 dark:border-white/10 hover:border-akatech-gold/50"
+                    ? "bg-white dark:bg-akatech-card border-akatech-gold shadow-lg ring-1 ring-akatech-gold/20"
+                    : "bg-white dark:bg-akatech-card border-gray-200 dark:border-white/5 hover:border-akatech-gold/50 hover:shadow-md"
                 }`}
               >
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-bold text-gray-900 dark:text-white">
+                <div className="flex justify-between items-start mb-3">
+                  <h3
+                    className={`font-bold text-lg transition-colors ${
+                      selectedProject?.id === project.id
+                        ? "text-akatech-gold"
+                        : "text-gray-900 dark:text-white group-hover:text-akatech-gold"
+                    }`}
+                  >
                     {project.title}
                   </h3>
                   <span
-                    className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${
+                    className={`text-[10px] uppercase font-bold px-2.5 py-1 rounded-full border ${
                       project.status === "In Progress"
-                        ? "bg-akatech-gold/20 text-akatech-gold"
-                        : "bg-gray-200 dark:bg-gray-700 text-gray-500"
+                        ? "bg-akatech-gold/10 text-akatech-gold border-akatech-gold/20"
+                        : "bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-white/10"
                     }`}
                   >
                     {project.status}
                   </span>
                 </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
+                <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-4 leading-relaxed">
                   {project.description}
                 </p>
-                <div className="mt-4 flex items-center gap-2 text-xs text-gray-400">
-                  <Icons.Activity className="w-3 h-3" />
-                  <span>Phase: {project.currentPhase}</span>
+                <div className="flex items-center gap-2 text-xs font-medium text-gray-400 dark:text-gray-500">
+                  <Icons.Activity
+                    className={`w-3.5 h-3.5 ${
+                      project.status === "In Progress"
+                        ? "text-green-500"
+                        : "text-gray-400"
+                    }`}
+                  />
+                  <span>
+                    Phase:{" "}
+                    <span className="text-gray-600 dark:text-gray-300">
+                      {project.currentPhase}
+                    </span>
+                  </span>
                 </div>
               </motion.div>
             ))

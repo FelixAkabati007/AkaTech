@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Icons } from "@components/ui/Icons";
-import { mockService } from "@lib/mockData";
+import { localDataService } from "@lib/localData";
 import { jsPDF } from "jspdf";
 import { useToast } from "@components/ui/ToastProvider";
 import { getApiUrl } from "@lib/config";
@@ -59,7 +59,7 @@ export const ClientBilling = ({ user }) => {
           setFilteredInvoices(mapped);
         } else {
           // Fallback to mock if API fails
-          const data = mockService.getInvoices(user.id);
+          const data = localDataService.getInvoices(user.id);
           setInvoices(data);
           setFilteredInvoices(data);
         }
@@ -68,15 +68,15 @@ export const ClientBilling = ({ user }) => {
           const data = await projRes.json();
           setProjects(data);
         } else {
-          setProjects(mockService.getProjects());
+          setProjects(localDataService.getProjects());
         }
       } catch (e) {
         console.error(e);
         // Fallback
-        const data = mockService.getInvoices(user.id);
+        const data = localDataService.getInvoices(user.id);
         setInvoices(data);
         setFilteredInvoices(data);
-        setProjects(mockService.getProjects());
+        setProjects(localDataService.getProjects());
       }
     };
     fetchData();
@@ -590,3 +590,4 @@ export const ClientBilling = ({ user }) => {
     </div>
   );
 };
+

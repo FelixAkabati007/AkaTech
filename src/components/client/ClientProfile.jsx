@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Icons } from "@components/ui/Icons";
 import { AvatarUpload } from "@components/ui/AvatarUpload";
-import { mockService } from "@lib/mockData";
+import { localDataService } from "@lib/localData";
 import { useToast } from "@components/ui/ToastProvider";
 import { getApiUrl } from "@lib/config";
 
@@ -23,26 +23,26 @@ export const ClientProfile = ({ user, onUserUpdate }) => {
 
   const handleProfileUpdate = (e) => {
     e.preventDefault();
-    // For now keeping mockService for profile details, but user might expect real update
+    // For now keeping localDataService for profile details, but user might expect real update
     // Ideally this should also call an API
-    mockService.updateUser(formData);
+    localDataService.updateUser(formData);
     setProfile(formData);
     setIsEditing(false);
     addToast("Profile updated", "success");
   };
 
   const handleAvatarUpload = (dataUrl) => {
-    const newAvatar = mockService.updateAvatar(user.id, dataUrl);
+    const newAvatar = localDataService.updateAvatar(user.id, dataUrl);
     setProfile({ ...profile, avatarUrl: newAvatar });
   };
 
   const handleGoogleSync = () => {
-    const newAvatar = mockService.syncGoogleAvatar(user.id);
+    const newAvatar = localDataService.syncGoogleAvatar(user.id);
     setProfile({ ...profile, avatarUrl: newAvatar });
   };
 
   const handleRemoveAvatar = () => {
-    mockService.updateAvatar(user.id, null);
+    localDataService.updateAvatar(user.id, null);
     setProfile({ ...profile, avatarUrl: null });
   };
 
@@ -275,3 +275,4 @@ export const ClientProfile = ({ user, onUserUpdate }) => {
     </div>
   );
 };
+

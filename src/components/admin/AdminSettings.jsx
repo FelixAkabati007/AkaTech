@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Icons } from "@components/ui/Icons";
 import { getAuditLog, clearAuditLog } from "@lib/cookieUtils";
-import { mockService } from "@lib/mockData";
+import { localDataService } from "@lib/localData";
 
 export const AdminSettings = () => {
   const [settings, setSettings] = useState({
@@ -20,7 +20,7 @@ export const AdminSettings = () => {
 
   useEffect(() => {
     setAuditLog(getAuditLog());
-    const loadedSettings = mockService.getSettings();
+    const loadedSettings = localDataService.getSettings();
     if (loadedSettings) {
       setSettings(loadedSettings);
     }
@@ -51,7 +51,7 @@ export const AdminSettings = () => {
     try {
       // Simulate async operation
       await new Promise((resolve) => setTimeout(resolve, 800));
-      mockService.saveSettings(settings);
+      localDataService.saveSettings(settings);
       setSaveMessage({ type: "success", text: "Settings saved successfully!" });
 
       // Clear success message after 3 seconds
@@ -304,3 +304,4 @@ export const AdminSettings = () => {
     </div>
   );
 };
+

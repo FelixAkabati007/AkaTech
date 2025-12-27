@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Icons } from "@components/ui/Icons";
-import { mockService } from "@lib/mockData";
+import { localDataService } from "@lib/localData";
 import { io } from "socket.io-client";
 import { useToast } from "@components/ui/ToastProvider";
 import { jsPDF } from "jspdf";
@@ -48,17 +48,17 @@ export const AdminBilling = () => {
         }));
         setInvoices(mapped);
       } else {
-        setInvoices(mockService.getInvoices());
+        setInvoices(localDataService.getInvoices());
       }
     } catch (e) {
       console.error(e);
-      setInvoices(mockService.getInvoices());
+      setInvoices(localDataService.getInvoices());
     }
   };
 
   useEffect(() => {
     fetchInvoices();
-    setProjects(mockService.getProjects());
+    setProjects(localDataService.getProjects());
 
     const socket = io(getSocketUrl());
     socket.on("new_invoice_request", (newInv) => {
@@ -555,3 +555,4 @@ export const AdminBilling = () => {
     </div>
   );
 };
+
