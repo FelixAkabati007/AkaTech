@@ -43,14 +43,14 @@ if (!SECRET_KEY) {
 // --- Middleware ---
 app.use(
   helmet({
-    crossOriginOpenerPolicy: { policy: "unsafe-none" },
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5175",
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    origin: true, // Allow any origin dynamically (for dev/production flexibility)
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     credentials: true,
   })
 );
@@ -137,7 +137,6 @@ const authorizeAdmin = (req, res, next) => {
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Google Auth (Unified for Signup and Login)
-app.options("/api/signup/verify-google", cors()); // Enable pre-flight for this route
 
 app.post("/api/signup/verify-google", async (req, res) => {
   const { token } = req.body;
