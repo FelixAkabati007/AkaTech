@@ -229,9 +229,6 @@ describe("ClientBilling", () => {
     const submitButton = screen.getByText(/Pay GH₵/);
     fireEvent.click(submitButton);
 
-    // Should show loading state
-    // expect(screen.getByText("Processing...")).toBeInTheDocument();
-
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
         "Payment successful!",
@@ -264,5 +261,90 @@ describe("ClientBilling", () => {
     );
 
     expect(downloadButton).not.toBeDisabled();
+  });
+
+  it("submits invoice request with project type selection", async () => {
+    // Mock request endpoint
+    global.fetch = vi.fn((url, options) => {
+      if (url.includes("/client/invoices") && !url.includes("request")) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => "application/json" },
+          json: () => Promise.resolve(mockInvoices),
+        });
+      }
+      if (url.includes("/client/projects")) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => "application/json" },
+          json: () => Promise.resolve(mockProjects),
+        });
+      }
+      if (url.includes("/api/invoices/request")) {
+        const body = JSON.parse(options.body);
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              message: "Request received",
+              invoice: {
+                id: "REQ-123",
+                status: "requested",
+                amount: 0,
+                createdAt: new Date().toISOString(),
+                description: body.message,
+                projectId: body.projectId,
+                referenceNumber: "REQ-123",
+              },
+            }),
+        });
+      }
+      return Promise.reject("Unknown URL");
+    });
+
+    render(<ClientBilling user={mockUser} />);
+
+    // Open Request Modal
+    fireEvent.click(screen.getByText("Request Invoice"));
+
+    // Fill form
+    // The Select should now contain "E‑Commerce platforms"
+    // We select it
+    const select = screen.getByRole("combobox");
+    fireEvent.change(select, { target: { value: "E‑Commerce platforms" } });
+
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        "Please describe what you need an invoice for..."
+      ),
+      {
+        target: { value: "I need a store." },
+      }
+    );
+
+    // Submit
+    fireEvent.click(screen.getByText("Submit Request"));
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith(
+        "Invoice request submitted successfully!",
+        "success"
+      );
+    });
+
+    // Check if fetch was called with correct payload (projectId null, message prepended)
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/invoices/request"),
+      expect.objectContaining({
+        body: expect.stringContaining(`"projectId":null`),
+      })
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/invoices/request"),
+      expect.objectContaining({
+        body: expect.stringContaining(`[Project Type: E‑Commerce platforms]`),
+      })
+    );
   });
 });

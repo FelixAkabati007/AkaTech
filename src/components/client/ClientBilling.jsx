@@ -3,6 +3,114 @@ import { Icons } from "@components/ui/Icons";
 import { jsPDF } from "jspdf";
 import { useToast } from "@components/ui/ToastProvider";
 
+const PROJECT_TYPES = [
+  {
+    category: "🌐 Web & Application Development",
+    items: [
+      "E‑Commerce platforms",
+      "Learning Management Systems (LMS)",
+      "Social networking sites",
+      "Blogging platforms / CMS (Content Management Systems)",
+      "Online booking/reservation systems",
+      "Portfolio/personal branding websites",
+      "Event management systems",
+      "Donation & fundraising platforms",
+      "Online forums/discussion boards",
+      "Job boards & recruitment portals",
+    ],
+  },
+  {
+    category: "📊 Business & Enterprise Solutions",
+    items: [
+      "Customer Relationship Management (CRM) systems",
+      "Inventory management systems",
+      "Project management dashboards",
+      "Expense tracking & budgeting tools",
+      "Workflow automation tools",
+      "Enterprise Resource Planning (ERP) systems",
+      "Point of Sale (POS) integration platforms",
+      "HR management systems",
+      "Document management systems",
+      "Business intelligence dashboards",
+    ],
+  },
+  {
+    category: "🛡️ Security & Infrastructure",
+    items: [
+      "Authentication & authorization systems (OAuth/JWT)",
+      "Secure file sharing platforms",
+      "Cybersecurity monitoring dashboards",
+      "Role-based access control systems",
+      "Data encryption & backup solutions",
+      "Network monitoring tools",
+      "Cloud migration platforms",
+      "Identity management systems",
+      "API security gateways",
+      "Compliance management systems",
+    ],
+  },
+  {
+    category: "📱 Mobile & Cross-Platform",
+    items: [
+      "Mobile banking apps",
+      "Food delivery apps",
+      "Ride-hailing apps",
+      "Fitness tracking apps",
+      "E-learning mobile apps",
+      "Chat/messaging apps",
+      "Mobile payment wallets",
+      "Augmented Reality (AR) apps",
+      "IoT device control apps",
+      "Smart home management apps",
+    ],
+  },
+  {
+    category: "📊 Data & Analytics",
+    items: [
+      "Data visualization dashboards",
+      "Predictive analytics tools",
+      "AI-powered recommendation engines",
+      "Sentiment analysis platforms",
+      "Big data processing pipelines",
+      "Machine learning model deployment platforms",
+      "Real-time analytics systems",
+      "Survey & feedback analysis tools",
+      "KPI monitoring dashboards",
+      "Business forecasting tools",
+    ],
+  },
+  {
+    category: "🌍 Community & Advocacy",
+    items: [
+      "Waste management advocacy websites",
+      "Environmental awareness portals",
+      "Civic engagement platforms",
+      "Digital safety portals for schools",
+      "Online petition platforms",
+      "Community resource directories",
+      "Volunteer management systems",
+      "Nonprofit fundraising platforms",
+      "Public health awareness sites",
+      "Local government service portals",
+    ],
+  },
+  {
+    category: "🎨 Creative & Media",
+    items: [
+      "Online design collaboration tools",
+      "Digital storytelling platforms",
+      "Video streaming sites",
+      "Music sharing platforms",
+      "Photo gallery/portfolio sites",
+      "Podcast hosting platforms",
+      "Online art marketplaces",
+      "Interactive storytelling apps",
+      "Meme generators",
+      "Animation showcase platforms",
+    ],
+  },
+];
+
 export const ClientBilling = ({ user }) => {
   const { addToast } = useToast();
   const [invoices, setInvoices] = useState([]);
@@ -142,17 +250,28 @@ export const ClientBilling = ({ user }) => {
 
     try {
       const token = localStorage.getItem("token");
+
+      // Determine if projectId is a real project ID or a project type string
+      // If it's a project type, we set projectId to null and prepend type to message
+      const isExistingProject = projects.some(
+        (p) => p.id === requestData.projectId
+      );
+
+      const payload = {
+        subject: requestData.subject,
+        message: isExistingProject
+          ? requestData.message
+          : `[Project Type: ${requestData.projectId}]\n\n${requestData.message}`,
+        projectId: isExistingProject ? requestData.projectId : null,
+      };
+
       const res = await fetch("/api/invoices/request", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          subject: requestData.subject,
-          message: requestData.message,
-          projectId: requestData.projectId,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -176,7 +295,7 @@ export const ClientBilling = ({ user }) => {
             newInvoice.status.slice(1),
           date: new Date(newInvoice.createdAt).toLocaleDateString(),
           dueDate: "Pending",
-          description: requestData.message,
+          description: payload.message,
         };
         setInvoices((prev) => [mapped, ...prev]);
       } else {
@@ -339,14 +458,31 @@ export const ClientBilling = ({ user }) => {
                   >
                     Select a project
                   </option>
-                  {projects.map((p) => (
-                    <option
-                      key={p.id}
-                      value={p.id}
-                      className="text-gray-900 bg-white dark:bg-akatech-card"
-                    >
-                      {p.title || p.name}
-                    </option>
+                  {projects.length > 0 && (
+                    <optgroup label="My Projects">
+                      {projects.map((p) => (
+                        <option
+                          key={p.id}
+                          value={p.id}
+                          className="text-gray-900 bg-white dark:bg-akatech-card"
+                        >
+                          {p.title || p.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {PROJECT_TYPES.map((cat) => (
+                    <optgroup key={cat.category} label={cat.category}>
+                      {cat.items.map((item) => (
+                        <option
+                          key={item}
+                          value={item}
+                          className="text-gray-900 bg-white dark:bg-akatech-card"
+                        >
+                          {item}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </div>

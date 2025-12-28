@@ -36,14 +36,18 @@ export const ConnectionStatus = () => {
       return controller;
     };
 
-    // Check immediately on mount
+    // Check immediately on mount (debounced to avoid strict mode double-fetch)
     let activeController = null;
-    checkConnection().then((controller) => {
-      activeController = controller;
-    });
+    let initialCheckTimeout = setTimeout(() => {
+      checkConnection().then((controller) => {
+        activeController = controller;
+      });
+    }, 500);
 
     // Check every 30 seconds
     const intervalId = setInterval(() => {
+      // Only abort if we strictly need to, but for heartbeat, let's just start a new one.
+      // If we want to avoid overlap, we can abort:
       if (activeController) activeController.abort();
       checkConnection().then((controller) => {
         activeController = controller;
@@ -54,6 +58,7 @@ export const ConnectionStatus = () => {
       window.removeEventListener("online", updateStatus);
       window.removeEventListener("offline", updateStatus);
       clearInterval(intervalId);
+      clearTimeout(initialCheckTimeout); // Cancel initial check if unmounting immediately
       if (activeController) activeController.abort();
     };
   }, []);

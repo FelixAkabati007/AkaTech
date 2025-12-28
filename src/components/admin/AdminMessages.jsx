@@ -473,7 +473,10 @@ export const AdminMessages = () => {
                         {msg.name || "Admin"}
                       </h3>
                       <span className="text-xs text-gray-400 whitespace-nowrap ml-2">
-                        {format(new Date(msg.timestamp), "MMM d")}
+                        {msg.timestamp &&
+                        !isNaN(new Date(msg.timestamp).getTime())
+                          ? format(new Date(msg.timestamp), "MMM d")
+                          : ""}
                       </span>
                     </div>
                     <div
@@ -533,9 +536,19 @@ export const AdminMessages = () => {
               </div>
               <div className="flex items-center gap-2">
                 <div className="text-xs text-gray-400 text-right">
-                  {format(new Date(selectedMessage.timestamp), "MMM d, yyyy")}
-                  <br />
-                  {format(new Date(selectedMessage.timestamp), "h:mm a")}
+                  {selectedMessage.timestamp &&
+                  !isNaN(new Date(selectedMessage.timestamp).getTime()) ? (
+                    <>
+                      {format(
+                        new Date(selectedMessage.timestamp),
+                        "MMM d, yyyy"
+                      )}
+                      <br />
+                      {format(new Date(selectedMessage.timestamp), "h:mm a")}
+                    </>
+                  ) : (
+                    "No Date"
+                  )}
                 </div>
                 <button
                   onClick={() => setSelectedMessage(null)}
