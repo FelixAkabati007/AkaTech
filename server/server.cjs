@@ -41,7 +41,12 @@ if (!SECRET_KEY) {
 }
 
 // --- Middleware ---
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginOpenerPolicy: { policy: "unsafe-none" },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 app.use(cors());
 app.use(bodyParser.json());
 
