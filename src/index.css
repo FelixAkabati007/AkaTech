@@ -101,21 +101,40 @@
 
   /* Hide scrollbar for IE, Edge and Firefox */
   .no-scrollbar {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
   }
 
   /* Scroll Hint Styles */
   .scroll-hint {
     background:
-      /* Shadow Cover Top */
-      linear-gradient(white 30%, rgba(255, 255, 255, 0)) center top,
+      /* Shadow Cover Top */ linear-gradient(
+          white 30%,
+          rgba(255, 255, 255, 0)
+        )
+        center top,
       /* Shadow Cover Bottom */
-      linear-gradient(rgba(255, 255, 255, 0), white 70%) center bottom,
+        linear-gradient(rgba(255, 255, 255, 0), white 70%) center bottom,
       /* Shadow Top */
-      radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0)) center top,
+        radial-gradient(
+          farthest-side at 50% 0,
+          rgba(0, 0, 0, 0.2),
+          rgba(0, 0, 0, 0)
+        )
+        center top,
       /* Shadow Bottom */
-      radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0)) center bottom;
+        radial-gradient(
+          farthest-side at 50% 100%,
+          rgba(0, 0, 0, 0.2),
+          rgba(0, 0, 0, 0)
+        )
+        center bottom;
 
     background-repeat: no-repeat;
     background-size: 100% 40px, 100% 40px, 100% 14px, 100% 14px;
@@ -124,14 +143,27 @@
 
   .dark .scroll-hint {
     background:
-      /* Shadow Cover Top */
-      linear-gradient(#141414 30%, rgba(20, 20, 20, 0)) center top,
+      /* Shadow Cover Top */ linear-gradient(
+          #141414 30%,
+          rgba(20, 20, 20, 0)
+        )
+        center top,
       /* Shadow Cover Bottom */
-      linear-gradient(rgba(20, 20, 20, 0), #141414 70%) center bottom,
+        linear-gradient(rgba(20, 20, 20, 0), #141414 70%) center bottom,
       /* Shadow Top */
-      radial-gradient(farthest-side at 50% 0, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0)) center top,
+        radial-gradient(
+          farthest-side at 50% 0,
+          rgba(255, 255, 255, 0.1),
+          rgba(0, 0, 0, 0)
+        )
+        center top,
       /* Shadow Bottom */
-      radial-gradient(farthest-side at 50% 100%, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0)) center bottom;
+        radial-gradient(
+          farthest-side at 50% 100%,
+          rgba(255, 255, 255, 0.1),
+          rgba(0, 0, 0, 0)
+        )
+        center bottom;
 
     background-repeat: no-repeat;
     background-size: 100% 40px, 100% 40px, 100% 14px, 100% 14px;

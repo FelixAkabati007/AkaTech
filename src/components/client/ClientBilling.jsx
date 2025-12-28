@@ -3,114 +3,7 @@ import { Icons } from "@components/ui/Icons";
 import { jsPDF } from "jspdf";
 import { useToast } from "@components/ui/ToastProvider";
 import { io } from "socket.io-client";
-
-const PROJECT_TYPES = [
-  {
-    category: "🌐 Web & Application Development",
-    items: [
-      "E‑Commerce platforms",
-      "Learning Management Systems (LMS)",
-      "Social networking sites",
-      "Blogging platforms / CMS (Content Management Systems)",
-      "Online booking/reservation systems",
-      "Portfolio/personal branding websites",
-      "Event management systems",
-      "Donation & fundraising platforms",
-      "Online forums/discussion boards",
-      "Job boards & recruitment portals",
-    ],
-  },
-  {
-    category: "📊 Business & Enterprise Solutions",
-    items: [
-      "Customer Relationship Management (CRM) systems",
-      "Inventory management systems",
-      "Project management dashboards",
-      "Expense tracking & budgeting tools",
-      "Workflow automation tools",
-      "Enterprise Resource Planning (ERP) systems",
-      "Point of Sale (POS) integration platforms",
-      "HR management systems",
-      "Document management systems",
-      "Business intelligence dashboards",
-    ],
-  },
-  {
-    category: "🛡️ Security & Infrastructure",
-    items: [
-      "Authentication & authorization systems (OAuth/JWT)",
-      "Secure file sharing platforms",
-      "Cybersecurity monitoring dashboards",
-      "Role-based access control systems",
-      "Data encryption & backup solutions",
-      "Network monitoring tools",
-      "Cloud migration platforms",
-      "Identity management systems",
-      "API security gateways",
-      "Compliance management systems",
-    ],
-  },
-  {
-    category: "📱 Mobile & Cross-Platform",
-    items: [
-      "Mobile banking apps",
-      "Food delivery apps",
-      "Ride-hailing apps",
-      "Fitness tracking apps",
-      "E-learning mobile apps",
-      "Chat/messaging apps",
-      "Mobile payment wallets",
-      "Augmented Reality (AR) apps",
-      "IoT device control apps",
-      "Smart home management apps",
-    ],
-  },
-  {
-    category: "📊 Data & Analytics",
-    items: [
-      "Data visualization dashboards",
-      "Predictive analytics tools",
-      "AI-powered recommendation engines",
-      "Sentiment analysis platforms",
-      "Big data processing pipelines",
-      "Machine learning model deployment platforms",
-      "Real-time analytics systems",
-      "Survey & feedback analysis tools",
-      "KPI monitoring dashboards",
-      "Business forecasting tools",
-    ],
-  },
-  {
-    category: "🌍 Community & Advocacy",
-    items: [
-      "Waste management advocacy websites",
-      "Environmental awareness portals",
-      "Civic engagement platforms",
-      "Digital safety portals for schools",
-      "Online petition platforms",
-      "Community resource directories",
-      "Volunteer management systems",
-      "Nonprofit fundraising platforms",
-      "Public health awareness sites",
-      "Local government service portals",
-    ],
-  },
-  {
-    category: "🎨 Creative & Media",
-    items: [
-      "Online design collaboration tools",
-      "Digital storytelling platforms",
-      "Video streaming sites",
-      "Music sharing platforms",
-      "Photo gallery/portfolio sites",
-      "Podcast hosting platforms",
-      "Online art marketplaces",
-      "Interactive storytelling apps",
-      "Meme generators",
-      "Animation showcase platforms",
-    ],
-  },
-];
+import { PROJECT_TYPES } from "../../lib/constants";
 
 export const ClientBilling = ({ user }) => {
   const { addToast } = useToast();
@@ -241,7 +134,9 @@ export const ClientBilling = ({ user }) => {
   const filteredInvoices = useMemo(() => {
     return invoices.filter((inv) => {
       const projectTitle =
-        projects.find((p) => p.id === inv.projectId)?.title || "";
+        projects.find((p) => p.id === inv.projectId)?.title ||
+        inv.projectId ||
+        "";
       const matchesSearch =
         inv.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         projectTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -258,6 +153,15 @@ export const ClientBilling = ({ user }) => {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
+
+  const getDisplayProject = (invoice) => {
+    if (invoice.projectId) {
+      const p = projects.find((proj) => proj.id === invoice.projectId);
+      if (p) return p.title;
+    }
+    const match = invoice.description?.match(/^\[Project Type: (.*?)\]/);
+    return match ? match[1] : invoice.projectId || "Unknown Project";
+  };
 
   const handleDownloadInvoice = (invoice) => {
     setIsDownloading(true);
@@ -278,9 +182,7 @@ export const ClientBilling = ({ user }) => {
         doc.text(`Date: ${invoice.date}`, 10, 60);
         doc.text(`Due Date: ${invoice.dueDate}`, 10, 70);
 
-        const project =
-          projects.find((p) => p.id === invoice.projectId)?.title ||
-          "Unknown Project";
+        const project = getDisplayProject(invoice);
         doc.text(`Project: ${project}`, 10, 80);
 
         doc.text(`Amount: GH₵ ${invoice.amount.toFixed(2)}`, 10, 100);
@@ -829,6 +731,9 @@ export const ClientBilling = ({ user }) => {
                   Amount
                 </th>
                 <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
+                  Paid
+                </th>
+                <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider text-right">
@@ -847,8 +752,7 @@ export const ClientBilling = ({ user }) => {
                       {invoice.id}
                     </td>
                     <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                      {projects.find((p) => p.id === invoice.projectId)
-                        ?.title || "Unknown Project"}
+                      {getDisplayProject(invoice)}
                     </td>
                     <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
                       {invoice.date}
@@ -858,6 +762,12 @@ export const ClientBilling = ({ user }) => {
                     </td>
                     <td className="px-6 py-4 font-mono font-medium text-gray-900 dark:text-white">
                       GH₵ {invoice.amount.toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 font-mono font-medium text-green-600 dark:text-green-400">
+                      GH₵{" "}
+                      {(invoice.status === "Paid" ? invoice.amount : 0).toFixed(
+                        2
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <span
@@ -897,7 +807,7 @@ export const ClientBilling = ({ user }) => {
               ) : (
                 <tr>
                   <td
-                    colSpan="7"
+                    colSpan="8"
                     className="px-6 py-12 text-center text-gray-500 dark:text-gray-400"
                   >
                     <Icons.ShoppingBag className="w-12 h-12 mx-auto mb-3 opacity-20" />

@@ -4,6 +4,7 @@ import { localDataService } from "@lib/localData";
 import { io } from "socket.io-client";
 import { useToast } from "@components/ui/ToastProvider";
 import { jsPDF } from "jspdf";
+import { PROJECT_TYPES } from "../../lib/constants";
 
 export const AdminBilling = () => {
   const { addToast } = useToast();
@@ -148,6 +149,27 @@ export const AdminBilling = () => {
       : "/api/admin/invoices";
     const method = isEditMode ? "PATCH" : "POST";
 
+    // Check if projectId is a valid project ID
+    const isExistingProject = projects.some(
+      (p) => p.id === newInvoice.projectId
+    );
+    let finalProjectId = newInvoice.projectId;
+    let finalDescription = newInvoice.description;
+
+    if (newInvoice.projectId && !isExistingProject) {
+      // It's a Project Type string
+      finalProjectId = null;
+      finalDescription = `[Project Type: ${newInvoice.projectId}]\n\n${
+        newInvoice.description || ""
+      }`;
+    }
+
+    const payload = {
+      ...newInvoice,
+      projectId: finalProjectId,
+      description: finalDescription,
+    };
+
     try {
       const res = await fetch(url, {
         method,
@@ -155,7 +177,7 @@ export const AdminBilling = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(newInvoice),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
@@ -221,7 +243,7 @@ export const AdminBilling = () => {
       doc.text(`Invoice ID: ${invoice.id}`, 10, 50);
       doc.text(`Date: ${invoice.date}`, 10, 60);
       doc.text(`Due Date: ${invoice.dueDate}`, 10, 70);
-      const project = getProjectTitle(invoice.projectId);
+      const project = getProjectTitle(invoice);
       doc.text(`Project: ${project}`, 10, 80);
       doc.text(`Amount: GH₵ ${invoice.amount.toFixed(2)}`, 10, 100);
       doc.text(`Status: ${invoice.status}`, 10, 110);
@@ -232,15 +254,23 @@ export const AdminBilling = () => {
     }
   };
 
-  const getProjectTitle = (id) => {
-    const project = projects.find((p) => p.id === id);
-    return project ? project.title : "Unknown Project";
+  const getProjectTitle = (invoice) => {
+    if (!invoice) return "Unknown Project";
+    if (invoice.projectId) {
+      const project = projects.find((p) => p.id === invoice.projectId);
+      if (project) return project.title;
+    }
+    if (invoice.description) {
+      const match = invoice.description.match(/^\[Project Type: (.*?)\]/);
+      if (match && match[1]) return match[1];
+    }
+    return invoice.projectId || "Unknown Project";
   };
 
   // --- Pagination & Filtering Logic ---
   const filteredInvoices = useMemo(() => {
     return invoices.filter((invoice) => {
-      const projectTitle = getProjectTitle(invoice.projectId).toLowerCase();
+      const projectTitle = getProjectTitle(invoice).toLowerCase();
       const matchesSearch =
         invoice.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         projectTitle.includes(searchQuery.toLowerCase()) ||
@@ -384,6 +414,9 @@ export const AdminBilling = () => {
                   Amount
                 </th>
                 <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
+                  Paid
+                </th>
+                <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-4 font-bold text-gray-900 dark:text-white uppercase text-xs tracking-wider text-right">
@@ -401,13 +434,19 @@ export const AdminBilling = () => {
                     {invoice.id}
                   </td>
                   <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                    {getProjectTitle(invoice.projectId)}
+                    {getProjectTitle(invoice)}
                   </td>
                   <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
                     {invoice.date}
                   </td>
                   <td className="px-6 py-4 font-mono font-medium text-gray-900 dark:text-white">
                     GH₵ {invoice.amount.toFixed(2)}
+                  </td>
+                  <td className="px-6 py-4 font-mono font-medium text-green-600 dark:text-green-400">
+                    GH₵{" "}
+                    {(invoice.status === "Paid" ? invoice.amount : 0).toFixed(
+                      2
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <span
@@ -498,7 +537,7 @@ export const AdminBilling = () => {
             </h3>
             <form
               onSubmit={handleCreateOrUpdateInvoice}
-              className="space-y-4"
+              className="space-y-4 overflow-y-scroll no-scrollbar max-h-[60vh]"
               aria-label="create-invoice-form"
             >
               <div>
@@ -519,10 +558,23 @@ export const AdminBilling = () => {
                   }
                 >
                   <option value="">Select a Project</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title}
-                    </option>
+                  {projects.length > 0 && (
+                    <optgroup label="Active Projects">
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {PROJECT_TYPES.map((cat) => (
+                    <optgroup key={cat.category} label={cat.category}>
+                      {cat.items.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
                 {/* If projectId is missing but we have a description, it might be a new project request type */}

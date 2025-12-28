@@ -21,6 +21,7 @@ export const Avatar = ({ src, fallback, alt, size = "md", className = "" }) => {
         <img
           src={src}
           alt={alt || fallback}
+          crossOrigin="anonymous"
           referrerPolicy="no-referrer"
           onError={() => setError(true)}
           className={`${sizeClasses[size]} rounded-full object-cover border border-gray-200 dark:border-white/10 ${className}`}

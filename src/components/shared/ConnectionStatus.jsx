@@ -18,6 +18,10 @@ export const ConnectionStatus = () => {
       const signal = controller.signal;
 
       (async () => {
+        // Small delay to prevent race conditions/double-mount in Strict Mode
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        if (signal.aborted) return;
+
         try {
           // Using a no-cache HEAD request to the health endpoint
           const response = await fetch("/api/health", {
