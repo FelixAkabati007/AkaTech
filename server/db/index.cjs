@@ -1,5 +1,5 @@
-const { neon } = require("@neondatabase/serverless");
-const { drizzle } = require("drizzle-orm/neon-http");
+const { Pool } = require("pg");
+const { drizzle } = require("drizzle-orm/node-postgres");
 const schema = require("./schema.cjs");
 
 // Default to a placeholder if not set, but it will fail on query if invalid
@@ -8,11 +8,16 @@ const connectionString = process.env.DATABASE_URL;
 let db;
 
 if (connectionString) {
-  const sql = neon(connectionString);
-  db = drizzle(sql, { schema });
+  const pool = new Pool({
+    connectionString: connectionString,
+    ssl: { rejectUnauthorized: false }, // Required for Neon
+    max: 10, // Connection pool size
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000, // Increased to handle Neon cold starts
+  });
+  db = drizzle(pool, { schema });
 } else {
   console.warn("DATABASE_URL is not set. Database features will fail.");
-  // Mock db for initial load if needed, or just let it be undefined and handle in usage
 }
 
 module.exports = { db };

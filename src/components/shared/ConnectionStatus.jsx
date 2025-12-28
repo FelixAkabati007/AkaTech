@@ -1,67 +1,44 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+import { useSyncStatus } from "@components/ui/SyncStatusProvider";
 
 export const ConnectionStatus = () => {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const { status } = useSyncStatus();
   const [showTooltip, setShowTooltip] = useState(false);
 
-  useEffect(() => {
-    const updateStatus = () => {
-      setIsOnline(navigator.onLine);
-    };
+  const isOnline = status === "synced" || status === "syncing";
+  const isConnecting = status === "connecting";
 
-    window.addEventListener("online", updateStatus);
-    window.addEventListener("offline", updateStatus);
+  const getStatusColor = () => {
+    switch (status) {
+      case "synced":
+        return "#4CAF50"; // Green
+      case "syncing":
+        return "#2196F3"; // Blue
+      case "connecting":
+        return "#FFC107"; // Amber
+      case "error":
+      case "offline":
+      default:
+        return "#F44336"; // Red
+    }
+  };
 
-    // Periodic heartbeat check
-    const checkConnection = () => {
-      const controller = new AbortController();
-      const signal = controller.signal;
-
-      (async () => {
-        // Small delay to prevent race conditions/double-mount in Strict Mode
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        if (signal.aborted) return;
-
-        try {
-          // Using a no-cache HEAD request to the health endpoint
-          const response = await fetch("/api/health", {
-            method: "HEAD",
-            cache: "no-store",
-            signal,
-          });
-
-          if (response.ok && !signal.aborted) {
-            setIsOnline(true);
-          }
-        } catch (error) {
-          // Ignore abort errors or if the signal is already aborted
-          if (error.name === "AbortError" || signal.aborted) {
-            return;
-          }
-          console.warn("Connection check failed:", error);
-          setIsOnline(false);
-        }
-      })();
-
-      return controller;
-    };
-
-    // Check immediately on mount
-    let activeController = checkConnection();
-
-    // Check every 30 seconds
-    const intervalId = setInterval(() => {
-      if (activeController) activeController.abort();
-      activeController = checkConnection();
-    }, 30000);
-
-    return () => {
-      window.removeEventListener("online", updateStatus);
-      window.removeEventListener("offline", updateStatus);
-      clearInterval(intervalId);
-      if (activeController) activeController.abort();
-    };
-  }, []);
+  const getStatusText = () => {
+    switch (status) {
+      case "synced":
+        return "Online";
+      case "syncing":
+        return "Syncing...";
+      case "connecting":
+        return "Connecting...";
+      case "error":
+        return "Connection Failed";
+      case "offline":
+        return "Offline";
+      default:
+        return "Offline";
+    }
+  };
 
   return (
     <div
@@ -73,9 +50,11 @@ export const ConnectionStatus = () => {
       <div
         role="status"
         aria-live="polite"
-        aria-label={isOnline ? "Application online" : "Application offline"}
-        className={`w-3 h-3 rounded-full transition-colors duration-300 shadow-sm ring-1 ring-white/20 cursor-help`}
-        style={{ backgroundColor: isOnline ? "#4CAF50" : "#F44336" }}
+        aria-label={getStatusText()}
+        className={`w-3 h-3 rounded-full transition-colors duration-300 shadow-sm ring-1 ring-white/20 cursor-help ${
+          isConnecting || status === "syncing" ? "animate-pulse" : ""
+        }`}
+        style={{ backgroundColor: getStatusColor() }}
         data-testid="connection-status-indicator"
       />
 
@@ -85,7 +64,7 @@ export const ConnectionStatus = () => {
           className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium rounded shadow-lg whitespace-nowrap z-50 pointer-events-none"
           role="tooltip"
         >
-          {isOnline ? "Online" : "Offline"}
+          {getStatusText()}
           {/* Triangle pointer */}
           <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 dark:bg-gray-700 rotate-45"></div>
         </div>

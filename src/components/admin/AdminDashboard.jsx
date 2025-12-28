@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { Icons } from "@components/ui/Icons";
 import { Card } from "@components/ui/Card";
-import { io } from "socket.io-client";
+import { useSyncStatus } from "@components/ui/SyncStatusProvider";
 import { useToast } from "@components/ui/ToastProvider";
 
 export const AdminDashboard = () => {
   const { addToast } = useToast();
+  const { socket } = useSyncStatus();
   const [stats, setStats] = useState({
     totalUsers: 0,
     activeProjects: 0,
@@ -34,34 +35,22 @@ export const AdminDashboard = () => {
       }
     };
 
-    // Initialize Socket.io
-    const socket = io({
-      path: "/socket.io",
-      transports: ["websocket", "polling"],
-      withCredentials: true,
-      reconnectionAttempts: 5,
-    });
+    if (socket) {
+      // Listen for new user registrations
+      socket.on("new_user", (data) => {
+        addToast(`New registration: ${data.user.name || "Client"}`, "success");
+        fetchData();
+      });
 
-    socket.on("connect", () => {
-      console.log("Connected to real-time updates");
-    });
-
-    socket.on("connect_error", (err) => {
-      console.error("Socket connection error:", err);
-    });
-
-    // Listen for new user registrations
-    socket.on("new_user", (data) => {
-      addToast(`New registration: ${data.user.name || "Client"}`, "success");
-      fetchData();
-    });
-
-    // Listen for generic dashboard updates and invoice events
-    socket.on("dashboard_update", fetchData);
-    socket.on("invoice_generated", fetchData);
-    socket.on("invoice_paid", fetchData);
-    socket.on("new_invoice_request", fetchData);
-    socket.on("user_registered", fetchData); // Ensure consistent event name
+      // Listen for generic dashboard updates and invoice events
+      socket.on("dashboard_update", fetchData);
+      socket.on("invoice_generated", fetchData);
+      socket.on("invoice_created", fetchData);
+      socket.on("invoice_updated", fetchData);
+      socket.on("invoice_paid", fetchData);
+      socket.on("new_invoice_request", fetchData);
+      socket.on("user_registered", fetchData);
+    }
 
     fetchData();
 
@@ -87,12 +76,21 @@ export const AdminDashboard = () => {
     const healthInterval = setInterval(fetchData, 10000);
 
     return () => {
-      socket.disconnect();
+      if (socket) {
+        socket.off("new_user");
+        socket.off("dashboard_update");
+        socket.off("invoice_generated");
+        socket.off("invoice_created");
+        socket.off("invoice_updated");
+        socket.off("invoice_paid");
+        socket.off("new_invoice_request");
+        socket.off("user_registered");
+      }
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("subscriptionUpdated", handleCustomEvent);
       clearInterval(healthInterval);
     };
-  }, []);
+  }, [socket]);
 
   const statCards = [
     {

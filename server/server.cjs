@@ -39,6 +39,19 @@ const io = new Server(server, {
   },
 });
 
+// Heartbeat Mechanism
+setInterval(() => {
+  io.emit("heartbeat", { timestamp: Date.now() });
+}, 5000); // Send heartbeat every 5 seconds
+
+io.on("connection", (socket) => {
+  console.log(`Client connected: ${socket.id}`);
+
+  socket.on("disconnect", (reason) => {
+    console.log(`Client disconnected: ${socket.id}, reason: ${reason}`);
+  });
+});
+
 const PORT = process.env.PORT || 3001;
 const SECRET_KEY = process.env.JWT_SECRET;
 if (!SECRET_KEY) {
@@ -762,11 +775,27 @@ app.patch("/api/admin/invoices/:id", authenticateToken, async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
+    const safeUpdates = {};
+    if (updates.amount !== undefined) safeUpdates.amount = updates.amount;
+    if (updates.status !== undefined) safeUpdates.status = updates.status;
+    if (updates.projectId !== undefined)
+      safeUpdates.projectId = updates.projectId;
+    if (updates.items !== undefined) safeUpdates.items = updates.items;
+
     if (updates.description) {
-      updates.description = encrypt(updates.description);
+      safeUpdates.description = encrypt(updates.description);
     }
 
-    const updatedInvoice = await dal.updateInvoice(id, updates);
+    if (updates.dueDate) {
+      const date = new Date(updates.dueDate);
+      if (!isNaN(date.getTime())) {
+        safeUpdates.dueDate = date;
+      }
+    } else if (updates.dueDate === null || updates.dueDate === "") {
+      safeUpdates.dueDate = null;
+    }
+
+    const updatedInvoice = await dal.updateInvoice(id, safeUpdates);
     io.emit("invoice_updated", updatedInvoice);
     res.json(updatedInvoice);
   } catch (error) {
