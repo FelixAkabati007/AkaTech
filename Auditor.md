@@ -57,11 +57,11 @@
 
 ### 🔴 Critical Risks
 
-| File                                   | Issue                                                                     | Recommendation                                                         |
-| :------------------------------------- | :------------------------------------------------------------------------ | :--------------------------------------------------------------------- |
-| `server/server.cjs`                    | **Hardcoded Secret Key**: `SECRET_KEY` is hardcoded on line 37.           | **IMMEDIATE**: Move to `process.env.JWT_SECRET` and rotate keys.       |
-| `src/components/admin/AdminLayout.jsx` | **Exposed Credentials**: Hardcoded `admin/admin123` login in `useEffect`. | **IMMEDIATE**: Remove auto-login logic. Require manual authentication. |
-| `server/server.cjs`                    | **Permissive CORS**: `origin: "*"` allows any domain to connect.          | Restrict to specific frontend domains in production.                   |
+| File                                   | Issue                                                                     | Recommendation                                                         | Status   |
+| :------------------------------------- | :------------------------------------------------------------------------ | :--------------------------------------------------------------------- | :------- |
+| `server/server.cjs`                    | **Hardcoded Secret Key**: `SECRET_KEY` is hardcoded on line 37.           | **IMMEDIATE**: Move to `process.env.JWT_SECRET` and rotate keys.       | ✅ Fixed |
+| `src/components/admin/AdminLayout.jsx` | **Exposed Credentials**: Hardcoded `admin/admin123` login in `useEffect`. | **IMMEDIATE**: Remove auto-login logic. Require manual authentication. | ✅ Fixed |
+| `server/server.cjs`                    | **Permissive CORS**: `origin: "*"` allows any domain to connect.          | Restrict to specific frontend domains in production.                   | ✅ Fixed |
 
 ### 🟠 High Priority
 

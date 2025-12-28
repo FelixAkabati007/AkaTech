@@ -6,8 +6,14 @@ const { eq } = require("drizzle-orm");
 const bcrypt = require("bcryptjs");
 
 const setAdminPassword = async () => {
-  const email = "felixakabati007@gmail.com";
-  const password = "Awinegure_1310"; // Updated secure password
+  const email = process.env.ADMIN_EMAIL || "felixakabati007@gmail.com";
+  const password = process.argv[2];
+
+  if (!password) {
+    console.error("Usage: node scripts/set_admin_password.cjs <password> [email]");
+    console.error("Or set ADMIN_EMAIL in .env");
+    process.exit(1);
+  }
 
   try {
     console.log(`Searching for user: ${email}...`);

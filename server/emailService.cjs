@@ -5,8 +5,8 @@ const nodemailer = require("nodemailer");
 const transporter = nodemailer.createTransport({
   service: "gmail", // Or your SMTP provider
   auth: {
-    user: process.env.EMAIL_USER || "notifications@akatech.com",
-    pass: process.env.EMAIL_PASS || "your-app-password",
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 });
 
@@ -57,9 +57,13 @@ const sendInvoiceEmail = async (to, invoiceData, pdfBuffer) => {
     <div style="font-family: Arial, sans-serif; color: #333;">
       <h2>Invoice Details</h2>
       <p>Dear Customer,</p>
-      <p>Please find attached your invoice <strong>${invoiceData.referenceNumber}</strong>.</p>
+      <p>Please find attached your invoice <strong>${
+        invoiceData.referenceNumber
+      }</strong>.</p>
       <p><strong>Amount Due:</strong> GH₵ ${invoiceData.amount}</p>
-      <p><strong>Due Date:</strong> ${new Date(invoiceData.dueDate).toLocaleDateString()}</p>
+      <p><strong>Due Date:</strong> ${new Date(
+        invoiceData.dueDate
+      ).toLocaleDateString()}</p>
       <p>Thank you for your business.</p>
       <hr />
       <p style="font-size: 12px; color: #666;">AkaTech IT Solution</p>
@@ -70,7 +74,11 @@ const sendInvoiceEmail = async (to, invoiceData, pdfBuffer) => {
     console.log("---------------------------------------------------");
     console.log(`[Mock Email Service] To: ${to}`);
     console.log(`[Mock Email Service] Subject: ${subject}`);
-    console.log(`[Mock Email Service] Attachment: Invoice PDF (${pdfBuffer ? pdfBuffer.length : 0} bytes)`);
+    console.log(
+      `[Mock Email Service] Attachment: Invoice PDF (${
+        pdfBuffer ? pdfBuffer.length : 0
+      } bytes)`
+    );
     console.log("---------------------------------------------------");
     return;
   }

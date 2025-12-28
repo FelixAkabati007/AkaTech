@@ -19,16 +19,15 @@ const {
   sendInvoiceEmail,
 } = require("./emailService.cjs");
 
-// --- Load .env manually (Removed: dotenv handles this) ---
-// const envPath = path.join(__dirname, "../.env");
-// ...
-
 const app = express();
 const server = http.createServer(app);
 
+const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5175";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+
 const io = new Server(server, {
   cors: {
-    origin: true, // Allow any origin dynamically (consistent with Express CORS)
+    origin: CLIENT_URL,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -50,7 +49,7 @@ app.use(
 );
 app.use(
   cors({
-    origin: true, // Allow any origin dynamically (for dev/production flexibility)
+    origin: CLIENT_URL,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     credentials: true,
   })
@@ -186,9 +185,9 @@ app.post("/api/signup/verify-google", async (req, res) => {
         .status(400)
         .json({ error: "Email not found in Google profile" });
 
-    // Special Admin Logic for felixakabati007@gmail.com
+    // Special Admin Logic
     let role = "client";
-    if (googleUser.email === "felixakabati007@gmail.com") {
+    if (ADMIN_EMAIL && googleUser.email === ADMIN_EMAIL) {
       role = "admin";
     }
 
