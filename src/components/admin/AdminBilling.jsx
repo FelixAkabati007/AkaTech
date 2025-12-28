@@ -553,9 +553,27 @@ export const AdminBilling = () => {
                   // However, if it came in as a request with projectId=null, we might want to let admin assign it.
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
                   value={newInvoice.projectId || ""}
-                  onChange={(e) =>
-                    setNewInvoice({ ...newInvoice, projectId: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const selectedValue = e.target.value;
+                    let newAmount = newInvoice.amount;
+
+                    // Check if selectedValue matches a project type price
+                    for (const cat of PROJECT_TYPES) {
+                      const item = cat.items.find(
+                        (i) => i.name === selectedValue
+                      );
+                      if (item) {
+                        newAmount = item.price;
+                        break;
+                      }
+                    }
+
+                    setNewInvoice({
+                      ...newInvoice,
+                      projectId: selectedValue,
+                      amount: newAmount,
+                    });
+                  }}
                 >
                   <option value="">Select a Project</option>
                   {projects.length > 0 && (
@@ -570,8 +588,8 @@ export const AdminBilling = () => {
                   {PROJECT_TYPES.map((cat) => (
                     <optgroup key={cat.category} label={cat.category}>
                       {cat.items.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
+                        <option key={item.name} value={item.name}>
+                          {item.name}
                         </option>
                       ))}
                     </optgroup>

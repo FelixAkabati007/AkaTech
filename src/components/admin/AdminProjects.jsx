@@ -241,8 +241,12 @@ export const AdminProjects = () => {
                     {getClientName(project.clientId)}
                   </td>
                   <td className="px-6 py-4">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                    <select
+                      value={project.status}
+                      onChange={(e) =>
+                        handleStatusChange(project, e.target.value)
+                      }
+                      className={`cursor-pointer inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border outline-none focus:ring-2 focus:ring-offset-1 focus:ring-akatech-gold ${
                         project.status === "Completed"
                           ? "bg-green-100 text-green-800 border-green-200"
                           : project.status === "In Progress"
@@ -250,8 +254,10 @@ export const AdminProjects = () => {
                           : "bg-gray-100 text-gray-800 border-gray-200"
                       }`}
                     >
-                      {project.status}
-                    </span>
+                      <option value="Pending">Pending</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Completed">Completed</option>
+                    </select>
                   </td>
                   <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
                     {project.currentPhase || "N/A"}

@@ -38,15 +38,26 @@ const getDashboardStats = async () => {
     .then((res) => parseInt(res[0].count));
 
   // 4. Total Revenue (Sum of paid invoices)
-  // Since amount is text, we fetch and sum in JS for safety, or use a robust SQL cast.
-  // For now, let's fetch all 'paid' invoices.
   const paidInvoices = await db
     .select()
     .from(invoices)
-    .where(eq(invoices.status, "paid"));
+    .where(or(eq(invoices.status, "paid"), eq(invoices.status, "Paid")));
 
   const totalRevenue = paidInvoices.reduce((acc, inv) => {
     // Remove non-numeric chars except dot
+    const cleanAmount = inv.amount ? inv.amount.replace(/[^0-9.]/g, "") : "0";
+    return acc + (parseFloat(cleanAmount) || 0);
+  }, 0);
+
+  // 5. Outstanding Revenue (Sum of invoices not paid/cancelled)
+  const outstandingInvoices = await db
+    .select()
+    .from(invoices)
+    .where(
+      notInArray(invoices.status, ["paid", "Paid", "cancelled", "Cancelled"])
+    );
+
+  const outstandingRevenue = outstandingInvoices.reduce((acc, inv) => {
     const cleanAmount = inv.amount ? inv.amount.replace(/[^0-9.]/g, "") : "0";
     return acc + (parseFloat(cleanAmount) || 0);
   }, 0);
@@ -56,6 +67,7 @@ const getDashboardStats = async () => {
     activeProjects: activeProjectsCount,
     pendingTickets: pendingTicketsCount,
     totalRevenue,
+    outstandingRevenue,
   };
 };
 const getUserByEmail = async (email) => {
@@ -452,4 +464,41 @@ module.exports = {
   getSystemSetting,
   setSystemSetting,
   getDashboardStats,
+
+  // System Health
+  getSystemHealth: async () => {
+    if (!db) return null;
+    try {
+      const start = Date.now();
+      // Simple query to check DB connection and latency
+      await db.execute(sql`SELECT 1`);
+      const latency = Date.now() - start;
+
+      // Get DB Size (Postgres specific)
+      const sizeResult = await db.execute(
+        sql`SELECT pg_size_pretty(pg_database_size(current_database())) as size, pg_database_size(current_database()) as raw_size`
+      );
+      const dbSize = sizeResult[0]?.size || "Unknown";
+
+      // Calculate a "usage percentage" based on a hypothetical limit (e.g., 500MB for free tier)
+      // Neon free tier is usually 500MB.
+      const rawSize = parseInt(sizeResult[0]?.raw_size || 0);
+      const limit = 500 * 1024 * 1024; // 500MB
+      const dbUsage = Math.min(Math.round((rawSize / limit) * 100), 100);
+
+      return {
+        status: "healthy",
+        latency,
+        dbSize,
+        dbUsage,
+      };
+    } catch (error) {
+      console.error("Health Check Error:", error);
+      return {
+        status: "unhealthy",
+        error: error.message,
+        dbUsage: 0,
+      };
+    }
+  },
 };

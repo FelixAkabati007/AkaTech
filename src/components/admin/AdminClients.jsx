@@ -59,18 +59,6 @@ export const AdminClients = () => {
     fetchInvoices();
   }, [fetchInvoices]);
 
-  useEffect(() => {
-    // Calculate totals
-    const paid = invoices
-      .filter((inv) => inv.status === "Paid")
-      .reduce((sum, inv) => sum + parseFloat(inv.amount || 0), 0);
-    const due = invoices
-      .filter((inv) => inv.status !== "Paid" && inv.status !== "Cancelled")
-      .reduce((sum, inv) => sum + parseFloat(inv.amount || 0), 0);
-    setTotalRevenue(paid);
-    setTotalOutstanding(due);
-  }, [invoices]);
-
   const getClientMetrics = (userId) => {
     const clientInvoices = invoices.filter((inv) => inv.userId === userId);
     const totalSpent = clientInvoices
@@ -133,10 +121,15 @@ export const AdminClients = () => {
       });
     });
 
+    // Listen for invoice updates to keep metrics in sync
+    socket.on("invoice_generated", () => fetchInvoices());
+    socket.on("invoice_paid", () => fetchInvoices());
+    socket.on("new_invoice_request", () => fetchInvoices());
+
     return () => {
       socket.disconnect();
     };
-  }, [addToast]);
+  }, [addToast, fetchInvoices]);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -402,54 +395,7 @@ export const AdminClients = () => {
         </div>
       </div>
 
-      {/* Financial Metrics Display */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white dark:bg-akatech-card p-6 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full text-green-600 dark:text-green-400">
-              <Icons.DollarSign className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Total Revenue
-              </p>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                GH₵ {totalRevenue.toFixed(2)}
-              </h3>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-akatech-card p-6 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-full text-yellow-600 dark:text-yellow-400">
-              <Icons.Clock className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Outstanding
-              </p>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                GH₵ {totalOutstanding.toFixed(2)}
-              </h3>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-akatech-card p-6 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400">
-              <Icons.Users className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Total Clients
-              </p>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {users.length}
-              </h3>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Financial Metrics Display - Moved to Dashboard */}
 
       <div className="bg-white dark:bg-akatech-card rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">

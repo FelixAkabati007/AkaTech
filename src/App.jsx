@@ -1,6 +1,7 @@
 import React, { useState, useEffect, Suspense, lazy } from "react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastProvider } from "@components/ui/ToastProvider";
+import { Toaster } from "react-hot-toast";
 import { ScrollProgress } from "@components/ui/ScrollProgress";
 import { ShowcaseNav } from "@components/ui/ShowcaseNav";
 import { Navbar } from "@components/layout/Navbar";
@@ -284,6 +285,7 @@ export default function App() {
               onLogin={handleLogin}
               onGoogleLogin={handleGoogleLogin}
             />
+            <Toaster position="top-center" />
           </div>
         </ToastProvider>
       </div>

@@ -10,6 +10,7 @@ export const AdminDashboard = () => {
     totalUsers: 0,
     activeProjects: 0,
     totalRevenue: 0,
+    outstandingRevenue: 0,
     pendingTickets: 0,
   });
 
@@ -52,21 +53,25 @@ export const AdminDashboard = () => {
     // Listen for new user registrations
     socket.on("new_user", (data) => {
       addToast(`New registration: ${data.user.name || "Client"}`, "success");
-      setStats((prev) => ({ ...prev, totalUsers: prev.totalUsers + 1 }));
-      // Trigger a data refresh
       fetchData();
     });
 
-    // Listen for generic dashboard updates
-    socket.on("dashboard_update", () => {
-      fetchData();
-    });
+    // Listen for generic dashboard updates and invoice events
+    socket.on("dashboard_update", fetchData);
+    socket.on("invoice_generated", fetchData);
+    socket.on("invoice_paid", fetchData);
+    socket.on("new_invoice_request", fetchData);
+    socket.on("user_registered", fetchData); // Ensure consistent event name
 
     fetchData();
 
     // Real-time sync listeners
     const handleStorageChange = (e) => {
-      if (["projects", "tickets", "subscriptions", "users"].includes(e.key)) {
+      if (
+        ["projects", "tickets", "subscriptions", "users", "invoices"].includes(
+          e.key
+        )
+      ) {
         fetchData();
       }
     };
@@ -78,10 +83,14 @@ export const AdminDashboard = () => {
     window.addEventListener("storage", handleStorageChange);
     window.addEventListener("subscriptionUpdated", handleCustomEvent);
 
+    // Poll system health every 10 seconds
+    const healthInterval = setInterval(fetchData, 10000);
+
     return () => {
       socket.disconnect();
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("subscriptionUpdated", handleCustomEvent);
+      clearInterval(healthInterval);
     };
   }, []);
 
@@ -103,6 +112,13 @@ export const AdminDashboard = () => {
       val: `GH₵ ${stats.totalRevenue.toLocaleString()}`,
       icon: Icons.CreditCard,
       change: "+24%",
+    },
+    {
+      label: "Outstanding",
+      val: `GH₵ ${(stats.outstandingRevenue || 0).toLocaleString()}`,
+      icon: Icons.Clock, // Or another icon
+      change: "Due",
+      isNegative: true,
     },
     {
       label: "Pending Tickets",

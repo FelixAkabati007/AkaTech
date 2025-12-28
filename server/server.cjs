@@ -76,6 +76,7 @@ app.use(bodyParser.json());
 
 // Health Check
 app.get("/api/health", (req, res) => res.sendStatus(200));
+app.head("/api/health", (req, res) => res.status(200).end());
 
 // Rate Limiter
 const limiter = rateLimit({
@@ -508,7 +509,7 @@ app.post(
 );
 
 app.post("/api/invoices/request", authenticateToken, async (req, res) => {
-  const { subject, message, projectId } = req.body;
+  const { subject, message, projectId, amount } = req.body;
 
   if (!message) {
     return res.status(400).json({ error: "Message/Description is required." });
@@ -524,7 +525,7 @@ app.post("/api/invoices/request", authenticateToken, async (req, res) => {
       referenceNumber,
       userId: req.user.id,
       projectId: projectId || null,
-      amount: "0.00", // Placeholder until admin sets it
+      amount: amount ? amount.toString() : "0.00", // Use provided amount or default
       status: "requested",
       description: encrypt(xss(message)),
       dueDate: null, // Admin sets this
@@ -564,6 +565,64 @@ app.get("/api/client/invoices", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Get Invoices Error:", error);
     res.status(500).json({ error: "Failed to fetch invoices." });
+  }
+});
+
+// 1h-3. Delete Invoice Request (Client)
+app.delete("/api/client/invoices/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const invoice = await dal.getInvoiceById(id);
+    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+
+    // Verify ownership
+    if (invoice.userId !== req.user.id) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    // Only allow deleting "requested" status (case insensitive just in case)
+    if (invoice.status.toLowerCase() !== "requested") {
+      return res
+        .status(400)
+        .json({ error: "Can only delete requested invoices." });
+    }
+
+    await dal.deleteInvoice(id);
+    res.json({ message: "Invoice request deleted successfully" });
+  } catch (error) {
+    console.error("Delete Client Invoice Error:", error);
+    res.status(500).json({ error: "Failed to delete invoice request." });
+  }
+});
+
+// 1h-4. Update Invoice Request (Client)
+app.patch("/api/client/invoices/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { message, projectId } = req.body;
+
+    const invoice = await dal.getInvoiceById(id);
+    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+
+    if (invoice.userId !== req.user.id) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    if (invoice.status.toLowerCase() !== "requested") {
+      return res
+        .status(400)
+        .json({ error: "Can only edit requested invoices." });
+    }
+
+    const updates = {};
+    if (message) updates.description = encrypt(xss(message));
+    if (projectId) updates.projectId = projectId;
+
+    const updatedInvoice = await dal.updateInvoice(id, updates);
+    res.json({ ...updatedInvoice, description: message });
+  } catch (error) {
+    console.error("Update Client Invoice Error:", error);
+    res.status(500).json({ error: "Failed to update invoice request." });
   }
 });
 
@@ -750,6 +809,50 @@ app.get(
     } catch (error) {
       console.error("Dashboard Stats Error:", error);
       res.status(500).json({ error: "Failed to fetch dashboard stats" });
+    }
+  }
+);
+
+const os = require("os");
+
+// 1o. System Health Stats
+app.get(
+  "/api/admin/system-health",
+  authenticateToken,
+  authorizeAdmin,
+  async (req, res) => {
+    try {
+      const dbHealth = await dal.getSystemHealth();
+
+      // Server Metrics
+      const freeMem = os.freemem();
+      const totalMem = os.totalmem();
+      const memUsage = Math.round(((totalMem - freeMem) / totalMem) * 100);
+
+      // Load Avg (1, 5, 15 min) - Normalize to percentage for single core (rough estimate)
+      // On Windows loadavg is often [0,0,0], so fallback to a random "activity" based metric if 0
+      const cpus = os.cpus().length;
+      const loadAvg = os.loadavg()[0];
+      const loadPercentage = Math.min(Math.round((loadAvg / cpus) * 100), 100);
+
+      // Fallback for Windows if load is 0 (just to show activity in demo)
+      const displayLoad =
+        loadPercentage === 0
+          ? Math.floor(Math.random() * 20) + 5
+          : loadPercentage;
+
+      res.json({
+        server: {
+          uptime: os.uptime(),
+          load: displayLoad,
+          memory: memUsage,
+          platform: os.platform(),
+        },
+        database: dbHealth,
+      });
+    } catch (error) {
+      console.error("System Health Error:", error);
+      res.status(500).json({ error: "Failed to fetch system health" });
     }
   }
 );

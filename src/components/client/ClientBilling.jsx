@@ -199,6 +199,44 @@ export const ClientBilling = ({ user }) => {
     }, 100);
   };
 
+  const handleDeleteRequest = async (invoiceId) => {
+    if (
+      !window.confirm("Are you sure you want to delete this invoice request?")
+    )
+      return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/client/invoices/${invoiceId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        addToast("Invoice request deleted successfully", "success");
+        setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
+      } else {
+        const data = await res.json();
+        addToast(data.error || "Failed to delete request", "error");
+      }
+    } catch (e) {
+      console.error("Delete error:", e);
+      addToast("Error deleting request", "error");
+    }
+  };
+
+  const handleEditRequest = (invoice) => {
+    setEditingInvoiceId(invoice.id);
+    setRequestData({
+      subject: "Edit Invoice Request",
+      message: invoice.description,
+      projectId: invoice.projectId,
+    });
+    setIsModalOpen(true);
+  };
+
   const handleRequestInvoice = async (e) => {
     e.preventDefault();
     if (!requestData.projectId) {
@@ -221,47 +259,93 @@ export const ClientBilling = ({ user }) => {
         (p) => p.id === requestData.projectId
       );
 
+      let estimatedAmount = 0;
+      if (!isExistingProject) {
+        for (const cat of PROJECT_TYPES) {
+          const item = cat.items.find((i) => i.name === requestData.projectId);
+          if (item) {
+            estimatedAmount = item.price;
+            break;
+          }
+        }
+      }
+
       const payload = {
         subject: requestData.subject,
         message: isExistingProject
           ? requestData.message
           : `[Project Type: ${requestData.projectId}]\n\n${requestData.message}`,
         projectId: isExistingProject ? requestData.projectId : null,
+        amount: estimatedAmount,
       };
 
-      const res = await fetch("/api/invoices/request", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      let res;
+      if (editingInvoiceId) {
+        res = await fetch(`/api/client/invoices/${editingInvoiceId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        res = await fetch("/api/invoices/request", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+      }
 
       const data = await res.json();
 
       if (res.ok) {
-        addToast("Invoice request submitted successfully!", "success");
+        addToast(
+          editingInvoiceId
+            ? "Invoice request updated successfully!"
+            : "Invoice request submitted successfully!",
+          "success"
+        );
         setIsModalOpen(false);
+        setEditingInvoiceId(null);
         setRequestData({
           subject: "Invoice Request",
           message: "",
           projectId: "",
         });
 
-        const newInvoice = data.invoice;
-        const mapped = {
-          id: newInvoice.referenceNumber || newInvoice.id,
-          projectId: newInvoice.projectId,
-          amount: parseFloat(newInvoice.amount || 0),
-          status:
-            newInvoice.status.charAt(0).toUpperCase() +
-            newInvoice.status.slice(1),
-          date: new Date(newInvoice.createdAt).toLocaleDateString(),
-          dueDate: "Pending",
-          description: payload.message,
-        };
-        setInvoices((prev) => [mapped, ...prev]);
+        if (editingInvoiceId) {
+          // Update local state for edit
+          setInvoices((prev) =>
+            prev.map((inv) =>
+              inv.id === editingInvoiceId
+                ? {
+                    ...inv,
+                    description: payload.message,
+                    projectId: payload.projectId || inv.projectId,
+                  }
+                : inv
+            )
+          );
+        } else {
+          // Add new for create
+          const newInvoice = data.invoice;
+          const mapped = {
+            id: newInvoice.referenceNumber || newInvoice.id,
+            projectId: newInvoice.projectId,
+            amount: parseFloat(newInvoice.amount || 0),
+            status:
+              newInvoice.status.charAt(0).toUpperCase() +
+              newInvoice.status.slice(1),
+            date: new Date(newInvoice.createdAt).toLocaleDateString(),
+            dueDate: "Pending",
+            description: payload.message,
+          };
+          setInvoices((prev) => [mapped, ...prev]);
+        }
       } else {
         addToast(data.error || "Failed to submit request", "error");
       }
@@ -392,7 +476,7 @@ export const ClientBilling = ({ user }) => {
               id="modal-title"
               className="text-xl font-bold mb-4 text-gray-900 dark:text-white"
             >
-              Request Invoice
+              {editingInvoiceId ? "Edit Invoice Request" : "Request Invoice"}
             </h3>
             <form onSubmit={handleRequestInvoice} className="space-y-4">
               <div>
@@ -444,11 +528,11 @@ export const ClientBilling = ({ user }) => {
                     <optgroup key={cat.category} label={cat.category}>
                       {cat.items.map((item) => (
                         <option
-                          key={item}
-                          value={item}
+                          key={item.name}
+                          value={item.name}
                           className="text-gray-900 bg-white dark:bg-akatech-card"
                         >
-                          {item}
+                          {item.name}
                         </option>
                       ))}
                     </optgroup>
@@ -778,29 +862,55 @@ export const ClientBilling = ({ user }) => {
                         {invoice.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right flex justify-end gap-2 items-center">
-                      {(invoice.status === "Unpaid" ||
-                        invoice.status === "Overdue") && (
+                    <td className="px-6 py-4 text-right space-x-2">
+                      {invoice.status === "Unpaid" && (
                         <button
                           onClick={() => handlePayNow(invoice)}
-                          className="px-3 py-1 bg-akatech-gold text-white text-xs font-bold uppercase rounded hover:bg-akatech-goldDark transition-colors"
+                          className="text-green-600 hover:text-green-900 font-bold text-xs uppercase"
                         >
-                          Pay Now
+                          Pay
                         </button>
                       )}
                       <button
                         onClick={() => handleDownloadInvoice(invoice)}
-                        disabled={isDownloading}
-                        className="text-gray-400 hover:text-akatech-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed p-1"
-                        title="Download PDF"
-                        aria-label="Download invoice"
+                        className="text-gray-400 hover:text-akatech-gold transition-colors"
+                        title="Download"
                       >
-                        {isDownloading ? (
-                          <span className="w-4 h-4 animate-spin rounded-full border-2 border-gray-400 border-t-akatech-gold block" />
-                        ) : (
-                          <Icons.Download className="w-4 h-4" />
-                        )}
+                        <Icons.Download className="w-4 h-4" />
                       </button>
+                      {(invoice.status === "Requested" ||
+                        invoice.status === "Draft") && (
+                        <>
+                          <button
+                            onClick={() => {
+                              /* Edit logic */
+                              setRequestData({
+                                subject: "Edit Invoice Request",
+                                message: invoice.description,
+                                projectId: invoice.projectId,
+                              });
+                              setIsModalOpen(true);
+                            }}
+                            className="text-blue-400 hover:text-blue-600 transition-colors"
+                            title="Edit"
+                          >
+                            <Icons.Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              /* Delete logic - probably not implemented in API for client yet */
+                              addToast(
+                                "Delete functionality pending API support",
+                                "info"
+                              );
+                            }}
+                            className="text-red-400 hover:text-red-600 transition-colors"
+                            title="Delete"
+                          >
+                            <Icons.Trash className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))
