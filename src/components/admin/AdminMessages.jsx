@@ -72,31 +72,11 @@ export const AdminMessages = () => {
   };
 
   // --- Auth & Initial Load ---
-  const performLogin = async () => {
-    try {
-      const res = await fetch(`${API_URL}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "admin", password: "admin123" }),
-      });
-      const data = await res.json();
-      if (data.token) {
-        localStorage.setItem("token", data.token);
-        setToken(data.token);
-        return data.token;
-      }
-    } catch (err) {
-      console.error("Auth failed", err);
-    }
-    return null;
-  };
+  // performLogin removed (security cleanup)
 
   useEffect(() => {
     const init = async () => {
       let currentToken = localStorage.getItem("token");
-      if (!currentToken) {
-        // currentToken = await performLogin(); // Disable auto-login for now to prevent loop if backend fails
-      }
       if (currentToken) {
         fetchMessages(currentToken);
         fetchClients(currentToken);

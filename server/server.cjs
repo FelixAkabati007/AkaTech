@@ -28,8 +28,9 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:5175", // Restricted to Client URL
+    origin: true, // Allow any origin dynamically (consistent with Express CORS)
     methods: ["GET", "POST"],
+    credentials: true,
   },
 });
 
@@ -884,27 +885,6 @@ app.post("/api/login", async (req, res) => {
   }
 
   try {
-    // 1. Check for admin hardcoded credentials (legacy/demo)
-    if (username === "admin" && password === "admin123") {
-      let adminUser = await dal.getUserByEmail("admin@akatech.com");
-      if (!adminUser) {
-        adminUser = await dal.createUser({
-          name: "System Admin",
-          email: "admin@akatech.com",
-          role: "admin",
-          passwordHash: await bcrypt.hash("admin123", 10),
-          accountType: "admin",
-        });
-      }
-      const token = jwt.sign(
-        { id: adminUser.id, email: adminUser.email, role: "admin" },
-        SECRET_KEY,
-        { expiresIn: "1h" }
-      );
-      await logAudit("ADMIN_LOGIN", adminUser.id, { email: adminUser.email });
-      return res.json({ token, user: adminUser });
-    }
-
     // 2. Check for real user in DB
     const user = await dal.getUserByEmail(username);
 

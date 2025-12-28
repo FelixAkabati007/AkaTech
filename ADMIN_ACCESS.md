@@ -26,12 +26,7 @@ This account automatically receives full system privileges upon sign-in, includi
 - **Audit Logging:** All critical actions (logins, data modification, settings changes) are recorded in the system audit log (`server/db/audit_logs`).
 
 ## Backup Access Procedure
-In the event that the primary Google account is unavailable, the system retains a legacy local admin fallback for emergency maintenance.
-
-**Emergency Credentials (Dev/Local Only):**
-- **User:** `admin`
-- **Password:** `admin123`
-*(Note: These should be disabled or changed in production environments via `server/server.cjs`)*
+In the event that the primary Google account is unavailable, access recovery must be performed through database intervention. The legacy local admin fallback has been removed for security reasons.
 
 ## Configuration
 To update email notification settings, configure the following environment variables in `.env`:
