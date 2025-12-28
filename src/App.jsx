@@ -160,9 +160,17 @@ export default function App() {
       });
   };
 
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+  if (!googleClientId) {
+    console.error(
+      "Critical Error: VITE_GOOGLE_CLIENT_ID is missing in environment variables."
+    );
+  }
+
   return (
     <GoogleOAuthProvider
-      clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}
+      clientId={googleClientId}
       onScriptLoadError={() =>
         console.error("Google Sign-In script failed to load")
       }
