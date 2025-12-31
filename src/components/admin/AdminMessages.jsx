@@ -24,7 +24,6 @@ export const AdminMessages = () => {
   const [itemsPerPage] = useState(10);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem("token"));
 
   // Compose State
   const [isComposeOpen, setIsComposeOpen] = useState(false);
@@ -62,7 +61,7 @@ export const AdminMessages = () => {
       const promises = Array.from(selectedIds).map((id) =>
         fetch(`${API_URL}/messages/${id}`, {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         })
       );
       await Promise.all(promises);
@@ -76,14 +75,8 @@ export const AdminMessages = () => {
   // performLogin removed (security cleanup)
 
   useEffect(() => {
-    const init = async () => {
-      let currentToken = localStorage.getItem("token");
-      if (currentToken) {
-        fetchMessages(currentToken);
-        fetchClients(currentToken);
-      }
-    };
-    init();
+    fetchMessages();
+    fetchClients();
   }, []);
 
   // --- Keyboard Shortcuts ---
@@ -152,8 +145,7 @@ export const AdminMessages = () => {
     };
 
     const handleUpdateSubscriptions = () => {
-      const token = localStorage.getItem("token");
-      if (token) fetchClients(token, false);
+      fetchClients();
     };
 
     socket.on("new_message", handleNewMessage);
@@ -170,21 +162,14 @@ export const AdminMessages = () => {
   }, [socket, selectedMessage]);
 
   // --- API Calls ---
-  const fetchMessages = async (authToken, retry = true) => {
+  const fetchMessages = async (retry = true) => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/messages`, {
-        headers: { Authorization: `Bearer ${authToken}` },
+        credentials: "include",
       });
 
       if (!res.ok) {
-        if ((res.status === 401 || res.status === 403) && retry) {
-          console.log("Token expired/invalid, re-authenticating...");
-          const newToken = await performLogin();
-          if (newToken) {
-            return fetchMessages(newToken, false);
-          }
-        }
         throw new Error(`Server error: ${res.status}`);
       }
 
@@ -204,19 +189,13 @@ export const AdminMessages = () => {
     }
   };
 
-  const fetchClients = async (authToken, retry = true) => {
+  const fetchClients = async () => {
     try {
       const res = await fetch(`${API_URL}/clients`, {
-        headers: { Authorization: `Bearer ${authToken}` },
+        credentials: "include",
       });
 
       if (!res.ok) {
-        if ((res.status === 401 || res.status === 403) && retry) {
-          const newToken = await performLogin(); // Reuse login
-          if (newToken) {
-            return fetchClients(newToken, false);
-          }
-        }
         if (res.status === 404) {
           console.warn(
             "API /clients endpoint not found. The server might need a restart."
@@ -280,7 +259,7 @@ export const AdminMessages = () => {
       try {
         await fetch(`${API_URL}/messages/${id}`, {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
         // UI updates via socket
       } catch (err) {
@@ -297,8 +276,8 @@ export const AdminMessages = () => {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
+          credentials: "include",
           body: JSON.stringify({ status: "read" }),
         });
       } catch (err) {
@@ -315,8 +294,8 @@ export const AdminMessages = () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify(composeData),
       });
       if (!res.ok) throw new Error("Failed to send");

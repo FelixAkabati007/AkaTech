@@ -59,13 +59,12 @@ export const ClientProfile = ({ user, onUserUpdate }) => {
     }
 
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/auth/change-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({
           oldPassword: passwordData.current,
           newPassword: passwordData.new,

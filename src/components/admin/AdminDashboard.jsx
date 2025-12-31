@@ -18,11 +18,8 @@ export const AdminDashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem("token");
         const response = await fetch("/api/admin/stats", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: "include",
         });
 
         if (!response.ok) throw new Error("Failed to fetch stats");

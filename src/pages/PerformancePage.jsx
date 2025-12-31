@@ -4,7 +4,7 @@ import { LazyPreview } from "@components/ui/LazyPreview";
 export const PerformancePage = () => {
   const [metrics, setMetrics] = useState(null);
   useEffect(() => {
-    fetch("/api/quality/metrics")
+    fetch("/api/quality/metrics", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setMetrics(d))
       .catch(() => {});
@@ -29,7 +29,9 @@ export const PerformancePage = () => {
             <div className="text-3xl font-bold">{metrics?.lines ?? "—"}</div>
           </div>
           <div className="p-6 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-akatech-dark">
-            <div className="text-xs uppercase text-gray-500 mb-2">TODO/FIXME</div>
+            <div className="text-xs uppercase text-gray-500 mb-2">
+              TODO/FIXME
+            </div>
             <div className="text-3xl font-bold">{metrics?.todo ?? "—"}</div>
           </div>
         </div>

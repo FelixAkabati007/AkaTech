@@ -25,9 +25,8 @@ export const ClientLayout = ({ user, onLogout, onUserUpdate }) => {
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const token = localStorage.getItem("token");
         const res = await fetch("/api/notifications", {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
 
         if (!res.ok) throw new Error("Failed to fetch");
@@ -74,9 +73,8 @@ export const ClientLayout = ({ user, onLogout, onUserUpdate }) => {
     const checkInvoices = async () => {
       if (!user) return;
       try {
-        const token = localStorage.getItem("token");
         const res = await fetch("/api/client/invoices", {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
         if (res.ok) {
           const invoices = await res.json();

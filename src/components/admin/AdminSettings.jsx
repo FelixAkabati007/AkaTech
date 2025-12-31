@@ -34,7 +34,7 @@ export const AdminSettings = () => {
     }
 
     // Fetch Bank Details
-    fetch("/api/settings")
+    fetch("/api/settings", { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
         if (data && Object.keys(data).length > 0) {
@@ -78,13 +78,12 @@ export const AdminSettings = () => {
       localDataService.saveSettings(settings);
 
       // Save bank details to backend
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({ bankDetails }),
       });
 

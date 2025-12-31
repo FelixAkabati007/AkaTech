@@ -8,11 +8,9 @@ export const AdminSupport = () => {
   const [selectedTicket, setSelectedTicket] = useState(null);
 
   const fetchTickets = async () => {
-    const token = localStorage.getItem("adminToken");
-    if (!token) return;
     try {
       const res = await fetch("/api/tickets", {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (res.ok) setTickets(await res.json());
     } catch (e) {
@@ -27,14 +25,13 @@ export const AdminSupport = () => {
   }, []);
 
   const handleUpdateStatus = async (id, newStatus) => {
-    const token = localStorage.getItem("adminToken");
     try {
       await fetch(`/api/tickets/${id}`, {
         method: "PATCH",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({ status: newStatus }),
       });
       fetchTickets();
@@ -46,14 +43,13 @@ export const AdminSupport = () => {
   const handleReply = async (e) => {
     e.preventDefault();
     if (!replyText || !selectedTicket) return;
-    const token = localStorage.getItem("adminToken");
     try {
       const res = await fetch(`/api/tickets/${selectedTicket.id}`, {
         method: "PATCH",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({ response: replyText }),
       });
       if (res.ok) {

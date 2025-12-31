@@ -19,13 +19,10 @@ export const AdminSubscriptions = () => {
   const fetchSubscriptions = async () => {
     setLoading(true);
     try {
-      const currentToken = localStorage.getItem("adminToken");
-      if (!currentToken) return;
-
       const res = await fetch(
         `${API_URL}/subscriptions?page=${page}&limit=${limit}&status=${statusFilter}`,
         {
-          headers: { Authorization: `Bearer ${currentToken}` },
+          credentials: "include",
         }
       );
 
@@ -58,15 +55,13 @@ export const AdminSubscriptions = () => {
     setProcessingId(sub.id);
 
     try {
-      const currentToken = localStorage.getItem("adminToken");
-
       // 1. Approve Subscription
       const res = await fetch(`${API_URL}/subscriptions/${sub.id}/action`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${currentToken}`,
         },
+        credentials: "include",
         body: JSON.stringify({ action: "approve" }),
       });
 
@@ -91,8 +86,8 @@ export const AdminSubscriptions = () => {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${currentToken}`,
               },
+              credentials: "include",
               body: JSON.stringify({
                 userId: sub.userId,
                 projectId: project.id,
@@ -143,13 +138,12 @@ export const AdminSubscriptions = () => {
 
   const handleAction = async (id, action, details = {}) => {
     try {
-      const currentToken = localStorage.getItem("adminToken");
       const res = await fetch(`${API_URL}/subscriptions/${id}/action`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${currentToken}`,
         },
+        credentials: "include",
         body: JSON.stringify({ action, details }),
       });
 

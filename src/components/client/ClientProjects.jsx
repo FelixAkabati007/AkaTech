@@ -66,6 +66,7 @@ export const ClientProjects = ({ user }) => {
       const res = await fetch("/api/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           subject: `Update Request: ${selectedProject.title}`,
           message: requestMessage,

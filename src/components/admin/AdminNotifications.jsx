@@ -29,9 +29,8 @@ const AdminNotifications = () => {
 
   const fetchUsers = async () => {
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/users", {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();
@@ -44,9 +43,8 @@ const AdminNotifications = () => {
 
   const fetchHistory = async () => {
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/notifications/history", {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();
@@ -60,9 +58,8 @@ const AdminNotifications = () => {
   const fetchInbox = async () => {
     setInboxLoading(true);
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/notifications", {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();
@@ -77,10 +74,9 @@ const AdminNotifications = () => {
 
   const markAsRead = async (id) => {
     try {
-      const token = localStorage.getItem("token");
       await fetch(`/api/notifications/${id}/read`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       // Update local state
       setInbox((prev) =>
@@ -93,10 +89,9 @@ const AdminNotifications = () => {
 
   const markAllRead = async () => {
     try {
-      const token = localStorage.getItem("token");
       await fetch(`/api/notifications/read-all`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       setInbox((prev) => prev.map((n) => ({ ...n, read: true })));
       addToast("All notifications marked as read", "success");
@@ -110,13 +105,12 @@ const AdminNotifications = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/notifications/send", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify(formData),
       });
 

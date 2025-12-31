@@ -76,23 +76,18 @@ export default function App() {
   const { mode, cycleTheme } = useTheme();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      fetch("/api/auth/me", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+    // Attempt to fetch user using cookie
+    fetch("/api/auth/me", {
+      credentials: "include",
+    })
+      .then((res) => {
+        if (res.ok) return res.json();
+        throw new Error("Session expired");
       })
-        .then((res) => {
-          if (res.ok) return res.json();
-          throw new Error("Session expired");
-        })
-        .then((data) => setUser(data.user))
-        .catch(() => {
-          localStorage.removeItem("token");
-          setUser(null);
-        });
-    }
+      .then((data) => setUser(data.user))
+      .catch(() => {
+        setUser(null);
+      });
   }, []);
 
   const handleLogin = (email, password) => {
@@ -100,6 +95,7 @@ export default function App() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: email, password }),
+      credentials: "include",
     })
       .then(async (res) => {
         if (!res.ok) {
@@ -109,7 +105,7 @@ export default function App() {
         return res.json();
       })
       .then((data) => {
-        localStorage.setItem("token", data.token);
+        // Token is now in HTTP-only cookie
         setUser(data.user);
         setAuthModalOpen(false);
         // Correctly route to dashboard for both admin and client
@@ -123,8 +119,12 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    setUser(null);
-    setView("landing");
+    fetch("/api/logout", { method: "POST" })
+      .then(() => {
+        setUser(null);
+        setView("landing");
+      })
+      .catch((err) => console.error("Logout failed", err));
   };
 
   const handleSelectPlan = (plan) => {
@@ -146,6 +146,7 @@ export default function App() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ token: tokenResponse.access_token }),
+      credentials: "include",
     })
       .then(async (res) => {
         if (res.ok) return res.json();
@@ -155,7 +156,7 @@ export default function App() {
         );
       })
       .then((data) => {
-        localStorage.setItem("token", data.token);
+        // Token is now in HTTP-only cookie
         setUser(data.user);
         setAuthModalOpen(false);
         setView("dashboard");
@@ -165,8 +166,7 @@ export default function App() {
       });
   };
 
-  const googleClientId =
-    import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   useEffect(() => {
     if (!googleClientId) {

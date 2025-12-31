@@ -3,6 +3,7 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
@@ -149,8 +150,11 @@ const logAudit = async (action, performedBy, details) => {
 
 // --- Auth Middleware ---
 const authenticateToken = async (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
+  // Check cookie first (preferred), then header (fallback/legacy)
+  const token =
+    req.cookies.auth_token ||
+    (req.headers["authorization"] &&
+      req.headers["authorization"].split(" ")[1]);
 
   if (token == null)
     return res
@@ -471,6 +475,15 @@ app.post("/api/signup/verify-google", async (req, res) => {
       { expiresIn: "24h" }
     );
 
+    // Set secure cookie
+    res.cookie("auth_token", sessionToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      path: "/",
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    });
+
     const { passwordHash, ...safeUser } = user;
     res.json({
       token: sessionToken,
@@ -571,6 +584,15 @@ app.post("/api/auth/register", async (req, res) => {
     SECRET_KEY,
     { expiresIn: "24h" }
   );
+
+  // Set secure cookie
+  res.cookie("auth_token", token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    path: "/",
+    maxAge: 24 * 60 * 60 * 1000,
+  });
 
   // Return user without password
   const { passwordHash: _, ...userWithoutPassword } = newUser;
@@ -1446,6 +1468,15 @@ app.post("/api/login", async (req, res) => {
       { expiresIn: "24h" }
     );
 
+    // Set secure cookie
+    res.cookie("auth_token", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      path: "/",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
     // 5. Audit Log
     await logAudit("USER_LOGIN", user.id, { email: user.email });
 
@@ -1455,6 +1486,17 @@ app.post("/api/login", async (req, res) => {
     console.error("Login Error:", error);
     res.status(500).json({ error: "Login failed" });
   }
+});
+
+// 2a. Logout
+app.post("/api/logout", (req, res) => {
+  res.clearCookie("auth_token", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    path: "/",
+  });
+  res.json({ message: "Logged out" });
 });
 
 // --- Project Options API ---

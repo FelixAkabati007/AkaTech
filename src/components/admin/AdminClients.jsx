@@ -42,11 +42,9 @@ export const AdminClients = () => {
 
   const fetchInvoices = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
       const res = await fetch("/api/admin/invoices", {
         // Assuming this endpoint exists or I should add it to get all invoices for metrics
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();
@@ -75,14 +73,9 @@ export const AdminClients = () => {
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
-      if (!token) {
-        setLoading(false);
-        return;
-      }
 
       const res = await fetch("/api/users", {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
 
       if (res.ok) {
@@ -303,13 +296,12 @@ export const AdminClients = () => {
       const pdfBase64 = doc.output("datauristring").split(",")[1];
 
       // 2. Send to Backend
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/invoices/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({
           userId: selectedClient.id,
           items: invoiceData.items,

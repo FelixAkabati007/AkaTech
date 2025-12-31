@@ -36,9 +36,8 @@ export const AdminBilling = () => {
 
   const fetchAuditLogs = async () => {
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/admin/audit-logs", {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();
@@ -51,9 +50,8 @@ export const AdminBilling = () => {
 
   const fetchInvoices = async () => {
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/admin/invoices", {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();
@@ -129,7 +127,6 @@ export const AdminBilling = () => {
 
   const handleCreateOrUpdateInvoice = async (e) => {
     e.preventDefault();
-    const token = localStorage.getItem("token");
     const url = isEditMode
       ? `/api/admin/invoices/${editingId}`
       : "/api/admin/invoices";
@@ -161,8 +158,8 @@ export const AdminBilling = () => {
         method,
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify(payload),
       });
 
@@ -187,14 +184,13 @@ export const AdminBilling = () => {
   };
 
   const handleApprove = async (invoice) => {
-    const token = localStorage.getItem("token");
     try {
       const res = await fetch(`/api/admin/invoices/${invoice.uuid}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({
           status: "Sent", // Approve and Send
         }),
@@ -214,11 +210,10 @@ export const AdminBilling = () => {
   const handleDeleteInvoice = async (uuid) => {
     if (!window.confirm("Are you sure you want to delete this invoice?"))
       return;
-    const token = localStorage.getItem("token");
     try {
       const res = await fetch(`/api/admin/invoices/${uuid}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (res.ok) {
         addToast("Invoice deleted", "success");

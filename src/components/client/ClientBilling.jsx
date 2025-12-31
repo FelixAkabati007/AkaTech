@@ -46,13 +46,12 @@ export const ClientBilling = ({ user }) => {
 
   const fetchData = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
-      const headers = { Authorization: `Bearer ${token}` };
-
       const [invRes, projRes, settingsRes] = await Promise.all([
-        fetch("/api/client/invoices", { headers }),
-        fetch(`/api/client/projects?email=${user.email}`, { headers }),
-        fetch("/api/settings"),
+        fetch("/api/client/invoices", { credentials: "include" }),
+        fetch(`/api/client/projects?email=${user.email}`, {
+          credentials: "include",
+        }),
+        fetch("/api/settings", { credentials: "include" }),
       ]);
 
       if (!invRes.ok) {
@@ -271,12 +270,9 @@ export const ClientBilling = ({ user }) => {
       return;
 
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch(`/api/client/invoices/${invoiceId}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: "include",
       });
 
       if (res.ok) {
@@ -316,8 +312,6 @@ export const ClientBilling = ({ user }) => {
     setIsSubmittingRequest(true);
 
     try {
-      const token = localStorage.getItem("token");
-
       // Determine if projectId is a real project ID or a project type string
       // If it's a project type, we set projectId to null and prepend type to message
       const isExistingProject = projects.some(
@@ -350,8 +344,8 @@ export const ClientBilling = ({ user }) => {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
+          credentials: "include",
           body: JSON.stringify(payload),
         });
       } else {
@@ -359,8 +353,8 @@ export const ClientBilling = ({ user }) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
+          credentials: "include",
           body: JSON.stringify(payload),
         });
       }
@@ -458,7 +452,6 @@ export const ClientBilling = ({ user }) => {
     }
 
     try {
-      const token = localStorage.getItem("token");
       const payload = {
         method: paymentMethod,
         reference: paymentReference,
@@ -477,8 +470,8 @@ export const ClientBilling = ({ user }) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify(payload),
       });
 

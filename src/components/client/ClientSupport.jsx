@@ -45,6 +45,7 @@ export const ClientSupport = ({ user }) => {
       const res = await fetch("/api/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           ...newTicket,
           userEmail: user.email,
@@ -70,6 +71,7 @@ export const ClientSupport = ({ user }) => {
       const res = await fetch(`/api/client/tickets/${selectedTicket.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           email: user.email,
           response: replyMessage,
