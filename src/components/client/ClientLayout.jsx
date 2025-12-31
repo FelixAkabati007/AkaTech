@@ -141,13 +141,13 @@ export const ClientLayout = ({ user, onLogout, onUserUpdate }) => {
       <motion.aside
         initial={false}
         animate={{
-          width: isSidebarOpen ? 280 : 80,
+          width: isSidebarOpen ? (window.innerWidth >= 1920 ? 320 : 280) : 80,
           x: 0,
         }}
         className={`bg-white dark:bg-akatech-card border-r border-gray-200 dark:border-white/5 flex-col z-40
           ${
             isMobileSidebarOpen
-              ? "fixed inset-y-0 left-0 flex w-[280px] shadow-2xl"
+              ? "fixed inset-y-0 left-0 flex w-[280px] xs:w-[85vw] shadow-2xl"
               : "hidden md:flex relative flex-shrink-0"
           }
         `}
@@ -168,7 +168,7 @@ export const ClientLayout = ({ user, onLogout, onUserUpdate }) => {
           </AnimatePresence>
         </div>
 
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
           {menuItems.map((item) => (
             <button
               key={item.id}
@@ -176,7 +176,7 @@ export const ClientLayout = ({ user, onLogout, onUserUpdate }) => {
                 setActiveTab(item.id);
                 setIsMobileSidebarOpen(false);
               }}
-              className={`w-full flex items-center gap-4 p-3 rounded-lg transition-all duration-300 ${
+              className={`w-full flex items-center gap-4 p-3 min-h-[48px] rounded-lg transition-all duration-300 ${
                 activeTab === item.id
                   ? "bg-akatech-gold text-black shadow-lg shadow-akatech-gold/20"
                   : "text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white"
@@ -206,7 +206,8 @@ export const ClientLayout = ({ user, onLogout, onUserUpdate }) => {
         <div className="p-4 border-t border-gray-200 dark:border-white/5">
           <button
             onClick={onLogout}
-            className="w-full flex items-center gap-4 p-3 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
+            aria-label="Sign Out"
+            className="w-full flex items-center gap-4 p-3 min-h-[48px] rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
           >
             <Icons.LogOut className="w-5 h-5 flex-shrink-0" />
             <AnimatePresence>
@@ -227,12 +228,13 @@ export const ClientLayout = ({ user, onLogout, onUserUpdate }) => {
         {/* Desktop Collapse Button */}
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="hidden md:flex absolute -right-3 top-24 bg-white dark:bg-akatech-card border border-gray-200 dark:border-white/10 p-1.5 rounded-full shadow-md text-gray-500 hover:text-akatech-gold transition-colors"
+          className="hidden md:flex absolute -right-3 top-24 bg-white dark:bg-akatech-card border border-gray-200 dark:border-white/10 min-w-[32px] min-h-[48px] rounded-full shadow-md text-gray-500 hover:text-akatech-gold transition-colors items-center justify-center z-50"
+          title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
         >
           {isSidebarOpen ? (
-            <Icons.ChevronLeft className="w-3 h-3" />
+            <Icons.ChevronLeft className="w-4 h-4" />
           ) : (
-            <Icons.ChevronRight className="w-3 h-3" />
+            <Icons.ChevronRight className="w-4 h-4" />
           )}
         </button>
       </motion.aside>
@@ -244,7 +246,8 @@ export const ClientLayout = ({ user, onLogout, onUserUpdate }) => {
             {/* Mobile Menu Toggle */}
             <button
               onClick={() => setIsMobileSidebarOpen(true)}
-              className="md:hidden p-2 text-gray-500 hover:text-akatech-gold transition-colors"
+              className="md:hidden p-2 min-h-[48px] min-w-[48px] flex items-center justify-center text-gray-500 hover:text-akatech-gold transition-colors"
+              aria-label="Open Menu"
             >
               <Icons.Menu className="w-6 h-6" />
             </button>
@@ -258,7 +261,8 @@ export const ClientLayout = ({ user, onLogout, onUserUpdate }) => {
             <div className="relative">
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="flex items-center gap-4 hover:bg-gray-100 dark:hover:bg-white/5 p-2 rounded-lg transition-colors group outline-none focus:ring-2 focus:ring-akatech-gold"
+                className="flex items-center gap-4 hover:bg-gray-100 dark:hover:bg-white/5 p-2 min-h-[48px] rounded-lg transition-colors group outline-none focus:ring-2 focus:ring-akatech-gold"
+                aria-label="User Profile"
               >
                 <div className="text-right hidden sm:block">
                   <p className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-akatech-gold transition-colors">
@@ -307,17 +311,17 @@ export const ClientLayout = ({ user, onLogout, onUserUpdate }) => {
                             setActiveTab("profile");
                             setIsProfileOpen(false);
                           }}
-                          className="w-full flex items-center gap-3 p-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-akatech-gold transition-colors"
+                          className="w-full flex items-center gap-3 p-3 min-h-[48px] rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-akatech-gold transition-colors"
                         >
-                          <Icons.User className="w-4 h-4" /> Profile
+                          <Icons.User className="w-5 h-5" /> Profile
                         </button>
                       </div>
                       <div className="p-2 border-t border-gray-200 dark:border-white/5">
                         <button
                           onClick={onLogout}
-                          className="w-full flex items-center gap-3 p-2 rounded-lg text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
+                          className="w-full flex items-center gap-3 p-3 min-h-[48px] rounded-lg text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
                         >
-                          <Icons.LogOut className="w-4 h-4" /> Sign Out
+                          <Icons.LogOut className="w-5 h-5" /> Sign Out
                         </button>
                       </div>
                     </motion.div>
@@ -328,7 +332,7 @@ export const ClientLayout = ({ user, onLogout, onUserUpdate }) => {
           </div>
         </header>
 
-        <div className="p-6 md:p-8 max-w-7xl mx-auto">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto">
           <Suspense
             fallback={
               <div className="flex items-center justify-center h-64">

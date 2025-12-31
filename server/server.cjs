@@ -30,6 +30,20 @@ const ALLOWED_ORIGINS = [
   "http://localhost:5173", // Vite default
   "http://localhost:3000", // Common alternative
 ];
+
+if (!process.env.GOOGLE_CLIENT_ID) {
+  console.warn(
+    "WARNING: GOOGLE_CLIENT_ID is not set in environment variables. Google Auth will fail."
+  );
+} else {
+  console.log(
+    `Google Auth configured with Client ID: ${process.env.GOOGLE_CLIENT_ID.substring(
+      0,
+      10
+    )}...`
+  );
+}
+
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 
 const io = new Server(server, {
@@ -86,7 +100,13 @@ app.use(
     credentials: true,
   })
 );
-app.use(bodyParser.json());
+app.use(
+  bodyParser.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf.toString();
+    },
+  })
+);
 
 // Request Logger
 app.use((req, res, next) => {
@@ -170,6 +190,173 @@ const authorizeAdmin = (req, res, next) => {
       .json({ error: "Forbidden", message: "Insufficient permissions" });
   }
 };
+
+// --- Payment Webhook (External Providers) ---
+// --- Payment Webhook (External Providers) ---
+app.post("/api/webhooks/payment", async (req, res) => {
+  try {
+    const { reference, status, amount, provider, invoiceId } = req.body;
+    const paystackSignature = req.headers["x-paystack-signature"];
+    const stripeSignature = req.headers["stripe-signature"];
+
+    console.log(`Webhook received from ${provider || "unknown"}:`, req.body);
+
+    // Signature Verification (Paystack)
+    if (process.env.PAYSTACK_SECRET_KEY && paystackSignature) {
+      const hash = crypto
+        .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY)
+        .update(req.rawBody || JSON.stringify(req.body))
+        .digest("hex");
+
+      if (hash !== paystackSignature) {
+        console.warn("Invalid Paystack signature");
+        return res.status(401).json({ error: "Invalid signature" });
+      }
+      console.log("Paystack signature verified");
+    }
+
+    // Signature Verification (Stripe)
+    if (process.env.STRIPE_WEBHOOK_SECRET && stripeSignature) {
+      try {
+        const parts = stripeSignature.split(",");
+        const timestamp = parts.find((p) => p.startsWith("t="))?.split("=")[1];
+        const v1 = parts.find((p) => p.startsWith("v1="))?.split("=")[1];
+
+        if (!timestamp || !v1) {
+          throw new Error("Missing timestamp or signature in Stripe header");
+        }
+
+        const signedPayload = `${timestamp}.${req.rawBody}`;
+        const hash = crypto
+          .createHmac("sha256", process.env.STRIPE_WEBHOOK_SECRET)
+          .update(signedPayload)
+          .digest("hex");
+
+        if (hash !== v1) {
+          console.warn("Invalid Stripe signature");
+          return res.status(401).json({ error: "Invalid signature" });
+        }
+        console.log("Stripe signature verified");
+      } catch (err) {
+        console.warn("Stripe verification failed:", err.message);
+        return res.status(401).json({ error: "Invalid signature" });
+      }
+    }
+
+    // Normalize payload
+    let finalReference = reference;
+    let finalStatus = status;
+    let finalAmount = amount;
+    let finalProvider = provider;
+    let finalInvoiceId = invoiceId;
+
+    // Handle Paystack Event structure
+    if (req.body.event === "charge.success" && req.body.data) {
+      finalReference = req.body.data.reference;
+      finalStatus = "success";
+      finalAmount = req.body.data.amount / 100; // Paystack is in kobo
+      finalProvider = "paystack";
+      // Try to find invoiceId in metadata if available
+      if (req.body.data.metadata && req.body.data.metadata.invoiceId) {
+        finalInvoiceId = req.body.data.metadata.invoiceId;
+      }
+    }
+
+    if (finalStatus === "success" || finalStatus === "paid") {
+      let invoice;
+
+      if (finalInvoiceId) {
+        const allInvoices = await dal.getInvoices();
+        invoice = allInvoices.find(
+          (inv) =>
+            inv.id === finalInvoiceId || inv.referenceNumber === finalInvoiceId
+        );
+      } else if (finalReference) {
+        const allInvoices = await dal.getInvoices();
+        invoice = allInvoices.find(
+          (inv) => inv.referenceNumber === finalReference
+        );
+      }
+
+      if (invoice) {
+        if (invoice.status !== "Paid") {
+          const updatedInvoice = await dal.updateInvoice(invoice.id, {
+            status: "Paid",
+            paidAt: new Date(),
+            updatedAt: new Date(),
+            paymentMethod: finalProvider || "webhook",
+          });
+
+          // Activate Subscription if applicable
+          if (invoice.userId) {
+            try {
+              const subscriptions = await dal.getSubscriptionsByUserId(
+                invoice.userId
+              );
+              // Activate the most recent pending subscription
+              const pendingSub = subscriptions.find(
+                (s) => s.status === "pending"
+              );
+              if (pendingSub) {
+                await dal.updateSubscription(pendingSub.id, {
+                  status: "active",
+                  startDate: new Date(),
+                  updatedAt: new Date(),
+                });
+                console.log(
+                  `Activated subscription ${pendingSub.id} for user ${invoice.userId}`
+                );
+                // Notify User about subscription
+                await dal.createNotification({
+                  userId: invoice.userId,
+                  target: "user",
+                  title: "Subscription Activated",
+                  message: `Your subscription to ${pendingSub.plan} is now active.`,
+                  readBy: [],
+                });
+              }
+            } catch (subError) {
+              console.error(
+                "Error activating subscription from webhook:",
+                subError
+              );
+            }
+          }
+
+          // Log audit
+          await logAudit("INVOICE_PAID_WEBHOOK", "SYSTEM", {
+            invoiceId: invoice.id,
+            amount: finalAmount,
+            provider: finalProvider,
+            reference: finalReference,
+          });
+
+          // Notify Client via Socket
+          io.emit("invoice_paid", {
+            invoiceId: invoice.id,
+            projectId: invoice.projectId,
+          });
+
+          // Send Email Receipt
+          const user = await dal.getUserById(invoice.userId);
+          if (user) {
+            sendInvoiceEmail(user, invoice, "receipt").catch(console.error);
+          }
+        }
+      } else {
+        console.warn(
+          `Invoice not found for webhook reference: ${finalReference}`
+        );
+        // Don't return 404 to avoid retries from provider
+      }
+    }
+
+    res.json({ received: true });
+  } catch (e) {
+    console.error("Webhook Error:", e);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 // --- Routes ---
 
@@ -584,6 +771,122 @@ app.post("/api/invoices/request", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Invoice Request Error:", error);
     res.status(500).json({ error: "Failed to submit invoice request." });
+  }
+});
+
+// 1q. Signup Complete (Finalize & Generate Invoice)
+app.post("/api/signup/complete", async (req, res) => {
+  const { email, finalData } = req.body;
+
+  if (!email || !finalData) {
+    return res.status(400).json({ error: "Missing required data" });
+  }
+
+  try {
+    let user = await dal.getUserByEmail(email);
+
+    if (!user) {
+      // Should have been created by verify-google, but handle fallback
+      user = await dal.createUser({
+        email: xss(email),
+        name: xss(finalData.name),
+        phone: xss(finalData.phone),
+        company: xss(finalData.companyName),
+        role: "client",
+        accountType: "google", // Assuming mostly google for now
+      });
+    } else {
+      // Update details
+      const updates = {};
+      if (finalData.name) updates.name = xss(finalData.name);
+      if (finalData.phone) updates.phone = xss(finalData.phone);
+      if (finalData.companyName) updates.company = xss(finalData.companyName);
+
+      if (Object.keys(updates).length > 0) {
+        await dal.updateUser(user.id, updates);
+      }
+    }
+
+    // Handle Package Selection -> Subscription & Invoice
+    if (finalData.selectedPackage) {
+      const pkgName = finalData.selectedPackage;
+      // Find package price/details (Mock data source or DAL)
+      // Assuming we have access to PRICING_PACKAGES structure or similar
+      // For now, we'll map common names or rely on passed price if secure (not secure),
+      // better to look up.
+      // We can use PROJECT_TYPES or hardcode standard packages for this demo.
+
+      let price = 0;
+      let planName = pkgName;
+
+      // Simple lookup based on common names in the app
+      if (pkgName.includes("Starter")) price = 2000;
+      else if (pkgName.includes("Professional")) price = 5000;
+      else if (pkgName.includes("Enterprise")) price = 15000;
+      else if (pkgName.includes("Basic")) price = 1000;
+
+      // If price is 0, maybe try to match from PROJECT_TYPES if available in server context
+      // Or just default to a "Custom" amount
+      if (price === 0) price = 1000; // Default fallback
+
+      // 1. Create Subscription
+      const newSub = await dal.createSubscription({
+        userId: user.id,
+        userName: user.name,
+        userEmail: user.email,
+        plan: planName,
+        status: "pending",
+        startDate: null, // Starts when paid
+        endDate: null,
+        amount: price,
+      });
+
+      // 2. Create Invoice
+      const referenceNumber = `INV-${Date.now()}-${Math.floor(
+        Math.random() * 1000
+      )}`;
+      const newInvoice = await dal.createInvoice({
+        userId: user.id,
+        referenceNumber,
+        projectId: null, // Linked to subscription implicitly or add subscriptionId if schema supports
+        amount: price.toString(),
+        status: "Sent", // Unpaid
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        description: encrypt(`Initial Invoice for ${planName} Package`),
+        items: [
+          {
+            description: `${planName} Subscription`,
+            amount: price,
+            quantity: 1,
+          },
+        ],
+      });
+
+      // Notify User
+      await dal.createNotification({
+        userId: user.id,
+        target: "user",
+        title: "Invoice Generated",
+        message: `An invoice for your ${planName} plan has been generated. Please make payment to activate your account.`,
+        readBy: [],
+      });
+
+      // Real-time
+      io.emit("invoice_generated", newInvoice);
+    }
+
+    // Generate Token
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      SECRET_KEY,
+      { expiresIn: "24h" }
+    );
+
+    const { passwordHash, ...safeUser } = user;
+    res.json({ token, user: { ...safeUser, hasPassword: !!passwordHash } });
+  } catch (error) {
+    console.error("Signup Complete Error:", error);
+    res.status(500).json({ error: "Failed to complete signup" });
   }
 });
 
@@ -1698,20 +2001,31 @@ app.post("/api/signup/verify-google", async (req, res) => {
     const { email, email_verified } = payload;
 
     if (email_verified) {
+      // Generate a temporary signup token
+      const signupToken = jwt.sign(
+        { email, verified: true, method: "google" },
+        SECRET_KEY,
+        { expiresIn: "1h" }
+      );
+
       // Return success
       res.json({
         message: "Email verified successfully",
         email,
         method: "google",
+        signupToken,
       });
     } else {
+      console.warn(`Google email not verified for ${email}`);
       res.status(400).json({ error: "Google email not verified" });
     }
   } catch (error) {
     console.error("Google verification error:", error);
+    // Provide more specific error messages if possible
+    const errorMessage = error.message || "Invalid Google Token";
     res
-      .status(400)
-      .json({ error: "Invalid Google Token", details: error.message });
+      .status(401)
+      .json({ error: "Authentication failed", details: errorMessage });
   }
 });
 
@@ -1753,24 +2067,39 @@ app.get("/api/signup/progress", async (req, res) => {
 
 // 10e. Complete Signup
 app.post("/api/signup/complete", async (req, res) => {
-  const { email, finalData } = req.body;
+  const { email, finalData, signupToken } = req.body;
 
   try {
+    // Verify signup token if present (for passwordless/Google signup)
+    let isVerified = false;
+    if (signupToken) {
+      try {
+        const decoded = jwt.verify(signupToken, SECRET_KEY);
+        if (decoded.email === email && decoded.verified) {
+          isVerified = true;
+        }
+      } catch (err) {
+        console.warn("Invalid signup token:", err.message);
+      }
+    }
+
     // 1. Create User if not exists
     let user = await dal.getUserByEmail(email);
     let isNewUser = false;
 
     if (!user) {
-      if (!finalData.password) {
+      if (!finalData.password && !isVerified) {
         return res
           .status(400)
           .json({ error: "Password required for new users" });
       }
 
-      const hashedPassword = crypto
-        .createHash("sha256")
-        .update(finalData.password)
-        .digest("hex");
+      const hashedPassword = finalData.password
+        ? crypto.createHash("sha256").update(finalData.password).digest("hex")
+        : crypto
+            .createHash("sha256")
+            .update(crypto.randomBytes(32).toString("hex"))
+            .digest("hex"); // Random password for verified users
 
       user = await dal.createUser({
         name: xss(finalData.name || "Client"),

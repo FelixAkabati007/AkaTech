@@ -293,7 +293,7 @@ export const AdminLayout = ({ user, onLogout }) => {
             </div>
           </div>
         </header>
-        <div className="p-4 md:p-8 max-w-7xl mx-auto">
+        <div className="p-4 md:p-8 max-w-full mx-auto">
           <Suspense
             fallback={
               <div className="flex items-center justify-center h-full min-h-[400px]">

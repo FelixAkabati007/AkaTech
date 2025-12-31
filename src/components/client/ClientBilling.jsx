@@ -128,6 +128,11 @@ export const ClientBilling = ({ user }) => {
       addToast("Invoice updated", "info");
     };
 
+    const handleInvoicePaid = () => {
+      fetchData();
+      addToast("Invoice paid successfully", "success");
+    };
+
     const handleProjectOptionsUpdated = (data) => {
       if (data && Array.isArray(data)) {
         setProjectOptions(data);
@@ -135,15 +140,61 @@ export const ClientBilling = ({ user }) => {
     };
 
     socket.on("invoice_created", handleInvoiceCreated);
+    socket.on("invoice_generated", handleInvoiceCreated); // Handle auto-generated invoices
     socket.on("invoice_updated", handleInvoiceUpdated);
+    socket.on("invoice_paid", handleInvoicePaid);
     socket.on("project_options_updated", handleProjectOptionsUpdated);
+
+    socket.on("connect", () => setSocketStatus("connected"));
+    socket.on("disconnect", () => setSocketStatus("disconnected"));
+    socket.on("connect_error", () => setSocketStatus("error"));
 
     return () => {
       socket.off("invoice_created", handleInvoiceCreated);
+      socket.off("invoice_generated", handleInvoiceCreated);
       socket.off("invoice_updated", handleInvoiceUpdated);
+      socket.off("invoice_paid", handleInvoicePaid);
       socket.off("project_options_updated", handleProjectOptionsUpdated);
+      socket.off("connect");
+      socket.off("disconnect");
+      socket.off("connect_error");
     };
   }, [socket, fetchData, addToast]);
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat("en-GH", {
+      style: "currency",
+      currency: "GHS",
+    }).format(amount);
+  };
+
+  const stats = useMemo(() => {
+    const totalOutstanding = invoices
+      .filter((inv) => ["Unpaid", "Sent", "Overdue"].includes(inv.status))
+      .reduce((acc, curr) => acc + curr.amount, 0);
+
+    const totalPaid = invoices
+      .filter((inv) => inv.status === "Paid")
+      .reduce((acc, curr) => acc + curr.amount, 0);
+
+    const overdueAmount = invoices
+      .filter((inv) => inv.status === "Overdue")
+      .reduce((acc, curr) => acc + curr.amount, 0);
+
+    // Find next due date
+    const unpaidWithDates = invoices
+      .filter(
+        (inv) =>
+          ["Unpaid", "Sent", "Overdue"].includes(inv.status) &&
+          inv.dueDate !== "Pending"
+      )
+      .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+
+    const nextDue =
+      unpaidWithDates.length > 0 ? unpaidWithDates[0].dueDate : "N/A";
+
+    return { totalOutstanding, totalPaid, overdueAmount, nextDue };
+  }, [invoices]);
 
   const filteredInvoices = useMemo(() => {
     return invoices.filter((inv) => {
@@ -489,16 +540,16 @@ export const ClientBilling = ({ user }) => {
             title={`Live Sync: ${socketStatus}`}
           />
         </h2>
-        <div className="flex gap-2">
-          <div className="flex bg-gray-100 dark:bg-white/5 p-1 rounded-lg">
+        <div className="flex gap-2 flex-wrap md:flex-nowrap">
+          <div className="flex bg-gray-100 dark:bg-white/5 p-1 rounded-lg overflow-x-auto">
             {["All", "Paid", "Unpaid", "Overdue"].map((status) => (
               <button
                 key={status}
                 onClick={() => setFilterStatus(status)}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                className={`px-4 py-3 min-h-[48px] text-xs font-bold rounded-md transition-all whitespace-nowrap ${
                   filterStatus === status
                     ? "bg-white dark:bg-akatech-card text-akatech-gold shadow-sm"
-                    : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                    : "text-gray-500 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
                 {status}
@@ -506,14 +557,104 @@ export const ClientBilling = ({ user }) => {
             ))}
           </div>
           <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 bg-akatech-gold text-white text-sm font-bold uppercase tracking-widest hover:bg-akatech-goldDark transition-colors focus:outline-none focus:ring-2 focus:ring-akatech-gold focus:ring-offset-2"
-            aria-haspopup="dialog"
-            aria-expanded={isModalOpen}
-            aria-controls="request-invoice-modal"
+            onClick={() => {
+              setEditingInvoiceId(null);
+              setIsModalOpen(true);
+            }}
+            className="flex items-center justify-center gap-2 px-6 py-3 min-h-[48px] bg-akatech-gold text-white rounded-lg hover:bg-akatech-goldDark transition-colors text-sm font-bold uppercase tracking-wide whitespace-nowrap flex-grow md:flex-grow-0"
           >
+            <Icons.Plus className="w-5 h-5" />
             Request Invoice
           </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 bg-white dark:bg-akatech-card p-4 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
+        <Icons.Search className="w-5 h-5 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Search invoices, projects, or descriptions..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="flex-1 bg-transparent border-none focus:ring-0 text-gray-900 dark:text-white placeholder-gray-400 min-h-[48px]"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <div className="bg-white dark:bg-akatech-card p-6 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Total Outstanding
+              </p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                {formatCurrency(stats.totalOutstanding)}
+              </h3>
+            </div>
+            <div className="p-3 bg-red-50 dark:bg-red-900/10 rounded-lg text-red-500">
+              <Icons.CreditCard className="w-6 h-6" />
+            </div>
+          </div>
+          <div className="text-xs text-red-500 font-medium">
+            Action Required
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-akatech-card p-6 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Total Paid
+              </p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                {formatCurrency(stats.totalPaid)}
+              </h3>
+            </div>
+            <div className="p-3 bg-green-50 dark:bg-green-900/10 rounded-lg text-green-500">
+              <Icons.DollarSign className="w-6 h-6" />
+            </div>
+          </div>
+          <div className="text-xs text-green-500 font-medium">
+            Lifetime Value
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-akatech-card p-6 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Overdue
+              </p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                {formatCurrency(stats.overdueAmount)}
+              </h3>
+            </div>
+            <div className="p-3 bg-orange-50 dark:bg-orange-900/10 rounded-lg text-orange-500">
+              <Icons.AlertCircle className="w-6 h-6" />
+            </div>
+          </div>
+          <div className="text-xs text-orange-500 font-medium">
+            Please settle immediately
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-akatech-card p-6 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Next Due Date
+              </p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                {stats.nextDue}
+              </h3>
+            </div>
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg text-blue-500">
+              <Icons.Calendar className="w-6 h-6" />
+            </div>
+          </div>
+          <div className="text-xs text-blue-500 font-medium">
+            Upcoming Payment
+          </div>
         </div>
       </div>
 
@@ -524,8 +665,12 @@ export const ClientBilling = ({ user }) => {
           aria-modal="true"
           aria-labelledby="modal-title"
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setIsModalOpen(false)}
         >
-          <div className="bg-white dark:bg-akatech-card p-6 rounded-lg w-full max-w-md">
+          <div
+            className="bg-white dark:bg-akatech-card p-6 rounded-lg w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3
               id="modal-title"
               className="text-xl font-bold mb-4 text-gray-900 dark:text-white"
@@ -543,7 +688,7 @@ export const ClientBilling = ({ user }) => {
                   onChange={(e) =>
                     setRequestData({ ...requestData, subject: e.target.value })
                   }
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-akatech-card text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
+                  className="w-full px-4 py-2 min-h-[48px] rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-akatech-card text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
                 />
               </div>
               <div>
@@ -559,7 +704,7 @@ export const ClientBilling = ({ user }) => {
                       projectId: e.target.value,
                     })
                   }
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
+                  className="w-full px-4 py-2 min-h-[48px] rounded-lg border border-gray-300 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
                 >
                   <option
                     value=""
@@ -614,14 +759,14 @@ export const ClientBilling = ({ user }) => {
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   disabled={isSubmittingRequest}
-                  className="px-4 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-50"
+                  className="px-4 py-2 min-h-[48px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingRequest}
-                  className="px-4 py-2 bg-akatech-gold text-white rounded-lg font-bold hover:bg-akatech-goldDark transition-colors disabled:opacity-70 flex items-center gap-2"
+                  className="px-4 py-2 min-h-[48px] bg-akatech-gold text-white rounded-lg font-bold hover:bg-akatech-goldDark transition-colors disabled:opacity-70 flex items-center gap-2"
                 >
                   {isSubmittingRequest ? (
                     <>
@@ -640,8 +785,14 @@ export const ClientBilling = ({ user }) => {
 
       {/* Payment Modal */}
       {isPaymentModalOpen && paymentInvoice && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-akatech-card p-6 rounded-lg w-full max-w-md border border-gray-200 dark:border-white/10 shadow-xl">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setIsPaymentModalOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-akatech-card p-6 rounded-lg w-full max-w-md border border-gray-200 dark:border-white/10 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <Icons.CreditCard className="w-5 h-5 text-akatech-gold" />
@@ -673,7 +824,7 @@ export const ClientBilling = ({ user }) => {
                   key={method}
                   type="button"
                   onClick={() => setPaymentMethod(method)}
-                  className={`flex-1 py-2 text-xs font-bold uppercase rounded-md border transition-all ${
+                  className={`flex-1 py-2 min-h-[48px] text-xs font-bold uppercase rounded-md border transition-all ${
                     paymentMethod === method
                       ? "border-akatech-gold bg-akatech-gold/10 text-akatech-gold"
                       : "border-gray-200 dark:border-white/10 text-gray-500 hover:border-gray-300 dark:hover:border-white/20"
@@ -701,7 +852,7 @@ export const ClientBilling = ({ user }) => {
                         type="text"
                         required
                         placeholder="0000 0000 0000 0000"
-                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
+                        className="w-full pl-10 pr-4 py-2 min-h-[48px] rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
                         value={paymentDetails.cardNumber}
                         onChange={(e) =>
                           setPaymentDetails({
@@ -721,7 +872,7 @@ export const ClientBilling = ({ user }) => {
                         type="text"
                         required
                         placeholder="MM/YY"
-                        className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
+                        className="w-full px-4 py-2 min-h-[48px] rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
                         value={paymentDetails.expiry}
                         onChange={(e) =>
                           setPaymentDetails({
@@ -740,7 +891,7 @@ export const ClientBilling = ({ user }) => {
                         required
                         placeholder="123"
                         maxLength="3"
-                        className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
+                        className="w-full px-4 py-2 min-h-[48px] rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
                         value={paymentDetails.cvv}
                         onChange={(e) =>
                           setPaymentDetails({
@@ -780,7 +931,7 @@ export const ClientBilling = ({ user }) => {
                       type="text"
                       required
                       placeholder="Enter Transaction ID"
-                      className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
+                      className="w-full px-4 py-2 min-h-[48px] rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
                       value={paymentReference}
                       onChange={(e) => setPaymentReference(e.target.value)}
                     />
@@ -818,7 +969,7 @@ export const ClientBilling = ({ user }) => {
                       type="text"
                       required
                       placeholder="Enter Reference Number"
-                      className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
+                      className="w-full px-4 py-2 min-h-[48px] rounded-lg border border-gray-300 dark:border-white/10 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold outline-none"
                       value={paymentReference}
                       onChange={(e) => setPaymentReference(e.target.value)}
                     />
@@ -830,7 +981,7 @@ export const ClientBilling = ({ user }) => {
                 <button
                   type="submit"
                   disabled={isProcessingPayment}
-                  className="w-full py-3 bg-akatech-gold text-white rounded-lg font-bold hover:bg-akatech-goldDark transition-colors disabled:opacity-70 flex justify-center items-center gap-2"
+                  className="w-full py-3 min-h-[48px] bg-akatech-gold text-white rounded-lg font-bold hover:bg-akatech-goldDark transition-colors disabled:opacity-70 flex justify-center items-center gap-2"
                 >
                   {isProcessingPayment ? (
                     <>
@@ -850,7 +1001,99 @@ export const ClientBilling = ({ user }) => {
         </div>
       )}
 
-      <div className="bg-white dark:bg-akatech-card rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden">
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-4 mb-6">
+        {currentInvoices.length > 0 ? (
+          currentInvoices.map((invoice) => (
+            <div
+              key={invoice.id}
+              className="bg-white dark:bg-akatech-card p-4 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm"
+            >
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <span className="text-xs font-mono text-gray-500 dark:text-gray-400 block mb-1">
+                    #{invoice.id}
+                  </span>
+                  <h4 className="font-bold text-gray-900 dark:text-white">
+                    {getDisplayProject(invoice)}
+                  </h4>
+                </div>
+                <span
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
+                    invoice.status
+                  )}`}
+                >
+                  {invoice.status}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">
+                    Due Date
+                  </p>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {invoice.dueDate}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">
+                    Amount
+                  </p>
+                  <p className="font-mono font-bold text-gray-900 dark:text-white">
+                    GH₵ {invoice.amount.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100 dark:border-white/5">
+                {(invoice.status === "Unpaid" || invoice.status === "Sent") && (
+                  <button
+                    onClick={() => handlePayNow(invoice)}
+                    className="flex-1 py-3 bg-green-600/10 text-green-600 hover:bg-green-600/20 rounded-lg text-xs font-bold uppercase transition-colors min-h-[48px] flex items-center justify-center"
+                  >
+                    Pay Now
+                  </button>
+                )}
+                <button
+                  onClick={() => handleDownloadInvoice(invoice)}
+                  className="p-3 text-gray-400 hover:text-akatech-gold bg-gray-50 dark:bg-white/5 rounded-lg transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
+                  title="Download"
+                >
+                  <Icons.Download className="w-5 h-5" />
+                </button>
+                {(invoice.status === "Requested" ||
+                  invoice.status === "Draft") && (
+                  <>
+                    <button
+                      onClick={() => handleEditRequest(invoice)}
+                      className="p-3 text-blue-400 hover:text-blue-600 bg-blue-50 dark:bg-blue-900/10 rounded-lg transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
+                      title="Edit"
+                    >
+                      <Icons.Edit className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteRequest(invoice.id)}
+                      className="p-3 text-red-400 hover:text-red-600 bg-red-50 dark:bg-red-900/10 rounded-lg transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
+                      title="Delete"
+                    >
+                      <Icons.Trash className="w-5 h-5" />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            <Icons.ShoppingBag className="w-12 h-12 mx-auto mb-3 opacity-20" />
+            <p>No invoices found.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block bg-white dark:bg-akatech-card rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-gray-50 dark:bg-white/5 border-b border-gray-200 dark:border-white/10">
@@ -991,7 +1234,7 @@ export const ClientBilling = ({ user }) => {
             <button
               onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
               disabled={currentPage === 1}
-              className="px-4 py-2 text-sm bg-gray-100 dark:bg-white/10 rounded-lg disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-white/20 transition-colors"
+              className="px-4 py-2 min-h-[48px] flex items-center text-sm bg-gray-100 dark:bg-white/10 rounded-lg disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-white/20 transition-colors"
             >
               Previous
             </button>
@@ -1000,7 +1243,7 @@ export const ClientBilling = ({ user }) => {
                 setCurrentPage((prev) => Math.min(prev + 1, totalPages))
               }
               disabled={currentPage === totalPages}
-              className="px-4 py-2 text-sm bg-gray-100 dark:bg-white/10 rounded-lg disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-white/20 transition-colors"
+              className="px-4 py-2 min-h-[48px] flex items-center text-sm bg-gray-100 dark:bg-white/10 rounded-lg disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-white/20 transition-colors"
             >
               Next
             </button>

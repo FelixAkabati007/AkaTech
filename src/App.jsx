@@ -166,17 +166,14 @@ export default function App() {
   };
 
   const googleClientId =
-    import.meta.env.VITE_GOOGLE_CLIENT_ID ||
-    "336631405778-sngll5qo5a8mo57ifn9ru8ol1m7r7cgs.apps.googleusercontent.com";
-
-  if (!googleClientId) {
-    console.error(
-      "Critical Error: VITE_GOOGLE_CLIENT_ID is missing in environment variables."
-    );
-  }
+    import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   useEffect(() => {
-    if (googleClientId) {
+    if (!googleClientId) {
+      console.error(
+        "Critical Error: VITE_GOOGLE_CLIENT_ID is missing in environment variables. Google Auth will fail."
+      );
+    } else {
       // Debug log to ensure Client ID is loaded (masked for security)
       console.log(
         "Google Client ID loaded:",
@@ -277,7 +274,7 @@ export default function App() {
                   />
                 )}
               </Suspense>
-              <Footer onNavigate={handleNavigate} />
+              {view !== "dashboard" && <Footer onNavigate={handleNavigate} />}
               {view === "landing" && (
                 <Suspense fallback={null}>
                   <FloatingAssistant />

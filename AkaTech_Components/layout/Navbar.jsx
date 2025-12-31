@@ -98,7 +98,7 @@ export const Navbar = ({
             >
               AKATECH
             </span>
-            <span className="text-[9px] md:text-[10px] tracking-[0.3em] text-akatech-gold font-bold uppercase mt-1 whitespace-nowrap">
+            <span className="text-[10px] md:text-xs tracking-[0.3em] text-akatech-gold font-bold uppercase mt-1 whitespace-nowrap">
               IT Solutions
             </span>
           </div>
@@ -107,22 +107,22 @@ export const Navbar = ({
         <div className="hidden md:flex items-center space-x-2 lg:space-x-6">
           <SearchButton
             onSearch={(q) => console.log("Searching:", q)}
-            className="mr-2"
+            className="mr-2 min-h-[48px] min-w-[48px]"
           />
 
           {["Services", "About", "Pricing"].map((item) => (
             <button
               key={item}
               onClick={() => handleNav(item.toLowerCase())}
-              className="text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-akatech-gold dark:text-gray-400 dark:hover:text-akatech-gold transition-colors duration-300 relative group px-2 py-1"
+              className="text-sm font-bold uppercase tracking-widest text-gray-500 hover:text-akatech-gold dark:text-gray-400 dark:hover:text-akatech-gold transition-colors duration-300 relative group px-4 py-3 min-h-[48px]"
             >
               {item}
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-akatech-gold transition-all duration-300 group-hover:w-full"></span>
+              <span className="absolute bottom-2 left-4 right-4 h-0.5 bg-akatech-gold transition-all duration-300 w-0 group-hover:w-[calc(100%-32px)]"></span>
             </button>
           ))}
           <button
             onClick={() => handleNav("contact")}
-            className="text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-akatech-gold dark:text-gray-400 dark:hover:text-akatech-gold transition-colors duration-300 px-2 py-1"
+            className="text-sm font-bold uppercase tracking-widest text-gray-500 hover:text-akatech-gold dark:text-gray-400 dark:hover:text-akatech-gold transition-colors duration-300 px-4 py-3 min-h-[48px]"
           >
             Contact
           </button>
@@ -131,7 +131,7 @@ export const Navbar = ({
 
           <button
             onClick={cycleTheme}
-            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-akatech-gold transition-colors duration-300 flex items-center gap-2 group relative"
+            className="p-3 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-akatech-gold transition-colors duration-300 flex items-center gap-2 group relative min-h-[48px] min-w-[48px] justify-center"
             title={`Current: ${getThemeLabel()}. Click to cycle.`}
             aria-label={`Current theme is ${getThemeLabel()}. Click to switch theme.`}
           >
@@ -142,9 +142,9 @@ export const Navbar = ({
             <div className="flex items-center gap-3 ml-2">
               <button
                 onClick={toggleAuth}
-                className="flex items-center gap-3 group"
+                className="flex items-center gap-3 group min-h-[48px] min-w-[48px] justify-center"
               >
-                <div className="w-8 h-8 rounded bg-gradient-to-br from-akatech-gold to-akatech-goldDark flex items-center justify-center text-black font-bold text-xs ring-2 ring-transparent group-hover:ring-akatech-goldLight transition-all">
+                <div className="w-10 h-10 rounded bg-gradient-to-br from-akatech-gold to-akatech-goldDark flex items-center justify-center text-black font-bold text-sm ring-2 ring-transparent group-hover:ring-akatech-goldLight transition-all">
                   {user?.name?.[0] || "U"}
                 </div>
               </button>
@@ -154,7 +154,7 @@ export const Navbar = ({
               variant="outline"
               size="sm"
               onClick={toggleAuth}
-              className="ml-2 !py-2 !px-4"
+              className="ml-2 !py-3 !px-6 min-h-[48px]"
             >
               Client Login
             </Button>
@@ -213,7 +213,7 @@ export const Navbar = ({
                 </span>
                 <button
                   onClick={cycleTheme}
-                  className="text-akatech-gold p-3 min-w-[44px] min-h-[44px] border border-akatech-gold/30 rounded flex items-center justify-center"
+                  className="text-akatech-gold p-3 min-w-[48px] min-h-[48px] border border-akatech-gold/30 rounded flex items-center justify-center"
                 >
                   {getThemeIcon()}
                 </button>

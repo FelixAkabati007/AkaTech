@@ -11,6 +11,9 @@ const RecommendationAvatar = ({ rec }) => {
       <img
         src={rec.image}
         alt={rec.name}
+        loading="lazy"
+        width="48"
+        height="48"
         className="w-12 h-12 rounded-full object-cover border-2 border-akatech-gold"
         onError={() => setImgError(true)}
       />
