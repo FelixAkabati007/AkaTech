@@ -1940,6 +1940,63 @@ app.patch(
   }
 );
 
+// Update Subscription (Edit)
+app.put(
+  "/api/subscriptions/:id",
+  authenticateToken,
+  authorizeAdmin,
+  async (req, res) => {
+    const { id } = req.params;
+    const updates = req.body;
+    try {
+      // Prevent updating immutable fields if necessary, but for admin allow most
+      // Maybe sanitize?
+      const safeUpdates = {};
+      if (updates.plan) safeUpdates.plan = xss(updates.plan);
+      if (updates.status) safeUpdates.status = xss(updates.status);
+      if (updates.startDate) safeUpdates.startDate = updates.startDate;
+      if (updates.endDate) safeUpdates.endDate = updates.endDate;
+      if (updates.amount) safeUpdates.amount = updates.amount;
+      // ... add other fields as needed
+
+      const updatedSub = await dal.updateSubscription(id, safeUpdates);
+      if (!updatedSub)
+        return res.status(404).json({ error: "Subscription not found" });
+
+      await logAudit("UPDATE_SUBSCRIPTION", req.user.username, {
+        subId: id,
+        updates: safeUpdates,
+      });
+      res.json(updatedSub);
+    } catch (error) {
+      console.error("Update Subscription Error:", error);
+      res.status(500).json({ error: "Failed to update subscription" });
+    }
+  }
+);
+
+// Delete Subscription
+app.delete(
+  "/api/subscriptions/:id",
+  authenticateToken,
+  authorizeAdmin,
+  async (req, res) => {
+    const { id } = req.params;
+    try {
+      const sub = await dal.getSubscriptionById(id);
+      if (!sub)
+        return res.status(404).json({ error: "Subscription not found" });
+
+      await dal.deleteSubscription(id);
+      await logAudit("DELETE_SUBSCRIPTION", req.user.username, { subId: id });
+      res.json({ message: "Subscription deleted successfully" });
+    } catch (error) {
+      console.error("Delete Subscription Error:", error);
+      res.status(500).json({ error: "Failed to delete subscription" });
+    }
+  }
+);
+
 // New Endpoint: Generate Invoice
 app.post("/api/invoices/generate", authenticateToken, async (req, res) => {
   try {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Icons } from "@components/ui/Icons";
+import { Pencil, Trash2, X } from "lucide-react";
 import { PROJECT_TYPES } from "../../lib/constants";
 import { localDataService } from "@lib/localData";
 
@@ -15,6 +16,76 @@ export const AdminSubscriptions = () => {
   const [notification, setNotification] = useState(null);
   const [token, setToken] = useState(localStorage.getItem("adminToken"));
   const [processingId, setProcessingId] = useState(null);
+
+  // Edit/Delete State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [selectedSub, setSelectedSub] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    plan: "",
+    status: "",
+    startDate: "",
+    endDate: "",
+    amount: "",
+  });
+
+  const handleEditClick = (sub) => {
+    setSelectedSub(sub);
+    setEditFormData({
+      plan: sub.plan,
+      status: sub.status,
+      startDate: sub.startDate
+        ? new Date(sub.startDate).toISOString().split("T")[0]
+        : "",
+      endDate: sub.endDate
+        ? new Date(sub.endDate).toISOString().split("T")[0]
+        : "",
+      amount: sub.amount,
+    });
+    setEditModalOpen(true);
+  };
+
+  const handleDeleteClick = (sub) => {
+    setSelectedSub(sub);
+    setDeleteModalOpen(true);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${API_URL}/subscriptions/${selectedSub.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(editFormData),
+      });
+
+      if (!res.ok) throw new Error("Update failed");
+
+      showNotification("Subscription updated successfully");
+      setEditModalOpen(false);
+      fetchSubscriptions();
+    } catch (err) {
+      showNotification(err.message, "error");
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      const res = await fetch(`${API_URL}/subscriptions/${selectedSub.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!res.ok) throw new Error("Delete failed");
+
+      showNotification("Subscription deleted successfully");
+      setDeleteModalOpen(false);
+      fetchSubscriptions();
+    } catch (err) {
+      showNotification(err.message, "error");
+    }
+  };
 
   const fetchSubscriptions = async () => {
     setLoading(true);
@@ -334,57 +405,76 @@ export const AdminSubscriptions = () => {
                           End: {new Date(sub.endDate).toLocaleDateString()}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-right space-x-2">
-                        {sub.status === "pending" && (
-                          <>
-                            <button
-                              onClick={() => handleApprove(sub)}
-                              disabled={processingId === sub.id}
-                              className={`font-bold text-xs uppercase flex items-center gap-1 ${
-                                processingId === sub.id
-                                  ? "text-gray-400"
-                                  : "text-green-600 hover:text-green-900"
-                              }`}
-                            >
-                              {processingId === sub.id && (
-                                <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                              )}
-                              {processingId === sub.id
-                                ? "Processing"
-                                : "Approve"}
-                            </button>
-                            <button
-                              onClick={() => handleAction(sub.id, "reject")}
-                              className="text-red-600 hover:text-red-900 font-bold text-xs uppercase"
-                            >
-                              Reject
-                            </button>
-                          </>
-                        )}
-                        {sub.status === "active" && (
-                          <>
-                            <button
-                              onClick={() =>
-                                handleAction(sub.id, "extend", { months: 1 })
-                              }
-                              className="text-blue-600 hover:text-blue-900 font-bold text-xs uppercase"
-                            >
-                              Extend
-                            </button>
-                            <button
-                              onClick={() => handleAction(sub.id, "cancel")}
-                              className="text-red-600 hover:text-red-900 font-bold text-xs uppercase"
-                            >
-                              Cancel
-                            </button>
-                          </>
-                        )}
-                        {(sub.status === "cancelled" ||
-                          sub.status === "expired") && (
-                          <span className="text-gray-400 text-xs italic">
-                            No actions available
-                          </span>
-                        )}
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            {sub.status === "pending" && (
+                              <>
+                                <button
+                                  onClick={() => handleApprove(sub)}
+                                  disabled={processingId === sub.id}
+                                  className={`font-bold text-xs uppercase flex items-center gap-1 ${
+                                    processingId === sub.id
+                                      ? "text-gray-400"
+                                      : "text-green-600 hover:text-green-900"
+                                  }`}
+                                >
+                                  {processingId === sub.id && (
+                                    <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                                  )}
+                                  {processingId === sub.id
+                                    ? "Processing"
+                                    : "Approve"}
+                                </button>
+                                <button
+                                  onClick={() => handleAction(sub.id, "reject")}
+                                  className="text-red-600 hover:text-red-900 font-bold text-xs uppercase"
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                            {sub.status === "active" && (
+                              <>
+                                <button
+                                  onClick={() =>
+                                    handleAction(sub.id, "extend", {
+                                      months: 1,
+                                    })
+                                  }
+                                  className="text-blue-600 hover:text-blue-900 font-bold text-xs uppercase"
+                                >
+                                  Extend
+                                </button>
+                                <button
+                                  onClick={() => handleAction(sub.id, "cancel")}
+                                  className="text-red-600 hover:text-red-900 font-bold text-xs uppercase"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            )}
+                          </div>
+
+                          <div className="h-4 w-px bg-gray-300 dark:bg-white/20 mx-1"></div>
+
+                          <button
+                            onClick={() => handleEditClick(sub)}
+                            className="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+                            aria-label="Edit Subscription"
+                            title="Edit"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(sub)}
+                            className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+                            aria-label="Delete Subscription"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -418,6 +508,165 @@ export const AdminSubscriptions = () => {
           </button>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {editModalOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setEditModalOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-akatech-card rounded-lg shadow-xl w-full max-w-md overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-white/10">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                Edit Subscription
+              </h3>
+              <button
+                onClick={() => setEditModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Plan
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.plan}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, plan: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-white/10 rounded-lg bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Status
+                </label>
+                <select
+                  value={editFormData.status}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, status: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-white/10 rounded-lg bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold focus:border-transparent"
+                >
+                  <option value="active">Active</option>
+                  <option value="pending">Pending</option>
+                  <option value="expired">Expired</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.startDate}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        startDate: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-white/10 rounded-lg bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.endDate}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        endDate: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-white/10 rounded-lg bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Amount
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.amount}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, amount: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-white/10 rounded-lg bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-akatech-gold focus:border-transparent"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-bold text-white bg-akatech-gold hover:bg-akatech-goldDark rounded-lg transition-colors"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setDeleteModalOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-akatech-card rounded-lg shadow-xl w-full max-w-sm overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 text-center">
+              <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+                Delete Subscription
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                Are you sure you want to delete this subscription? This action
+                cannot be undone.
+              </p>
+              <div className="flex justify-center gap-3">
+                <button
+                  onClick={() => setDeleteModalOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
