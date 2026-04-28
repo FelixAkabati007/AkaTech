@@ -20,6 +20,9 @@ const {
   sendInvoiceEmail,
 } = require("./emailService.cjs");
 const { PROJECT_TYPES } = require("./constants.cjs");
+const { checkDatabaseHealth } = require("./db/healthCheck.cjs");
+const { errorHandler } = require("./errors/errorHandler.cjs");
+const logger = require("./logging/logger.cjs");
 
 const app = express();
 const server = http.createServer(app);
@@ -117,9 +120,32 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health Check
-app.get("/api/health", (req, res) => res.sendStatus(200));
-app.head("/api/health", (req, res) => res.status(200).end());
+// Health Check Endpoints
+app.get("/api/health", async (req, res) => {
+  try {
+    const health = await checkDatabaseHealth();
+    const statusCode = health.healthy ? 200 : 503;
+    res.status(statusCode).json(health);
+  } catch (error) {
+    logger.error("Health check failed", { error: error.message });
+    res.status(503).json({
+      healthy: false,
+      error: "Health check failed",
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+app.head("/api/health", async (req, res) => {
+  try {
+    const health = await checkDatabaseHealth();
+    const statusCode = health.healthy ? 200 : 503;
+    res.status(statusCode).end();
+  } catch (error) {
+    logger.error("Health check failed", { error: error.message });
+    res.status(503).end();
+  }
+});
 
 // Rate Limiter
 const limiter = rateLimit({
@@ -551,57 +577,65 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
 });
 
 // 0.2 Register User (Email/Password)
-app.post("/api/auth/register", async (req, res) => {
-  const { name, email, password, role, accountType } = req.body;
+app.post("/api/auth/register", async (req, res, next) => {
+  try {
+    const { name, email, password, role, accountType } = req.body;
 
-  if (!name || !email || !password) {
-    return res
-      .status(400)
-      .json({ error: "Name, email, and password are required." });
+    if (!name || !email || !password) {
+      return res
+        .status(400)
+        .json({ error: "Name, email, and password are required." });
+    }
+
+    if (password.length < 8) {
+      return res
+        .status(400)
+        .json({ error: "Password must be at least 8 characters long." });
+    }
+
+    const existingUser = await dal.getUserByEmail(email);
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ error: "User already exists with this email." });
+    }
+
+    // Use bcrypt for secure password hashing (10 rounds)
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = await dal.createUser({
+      name: xss(name),
+      email: xss(email),
+      passwordHash: hashedPassword,
+      role: role || "client",
+      accountType: accountType || "Auto",
+    });
+
+    const token = jwt.sign(
+      { id: newUser.id, email: newUser.email, role: newUser.role },
+      SECRET_KEY,
+      { expiresIn: "24h" }
+    );
+
+    // Set secure cookie
+    res.cookie("auth_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      path: "/",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
+    // Return user without password
+    const { passwordHash: _, ...userWithoutPassword } = newUser;
+
+    // Notify clients
+    io.emit("user_registered", userWithoutPassword);
+
+    res.status(201).json({ token, user: userWithoutPassword });
+  } catch (error) {
+    next(error);
   }
-
-  const existingUser = await dal.getUserByEmail(email);
-  if (existingUser) {
-    return res
-      .status(400)
-      .json({ error: "User already exists with this email." });
-  }
-
-  const hashedPassword = crypto
-    .createHash("sha256")
-    .update(password)
-    .digest("hex");
-
-  const newUser = await dal.createUser({
-    name: xss(name),
-    email: xss(email),
-    passwordHash: hashedPassword,
-    role: role || "client",
-    accountType: accountType || "Auto",
-  });
-
-  const token = jwt.sign(
-    { id: newUser.id, email: newUser.email, role: newUser.role },
-    SECRET_KEY,
-    { expiresIn: "24h" }
-  );
-
-  // Set secure cookie
-  res.cookie("auth_token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    path: "/",
-    maxAge: 24 * 60 * 60 * 1000,
-  });
-
-  // Return user without password
-  const { passwordHash: _, ...userWithoutPassword } = newUser;
-
-  // Notify clients
-  io.emit("user_registered", userWithoutPassword);
-
-  res.status(201).json({ token, user: userWithoutPassword });
 });
 
 // 0.3 Get All Users (Admin)
@@ -2715,11 +2749,38 @@ io.on("connection", (socket) => {
   });
 });
 
+// Error Handler Middleware (must be after all other middleware/routes)
+app.use(errorHandler);
+
+// Global Promise Rejection Handler
+process.on("unhandledRejection", (reason, promise) => {
+  logger.error("Unhandled promise rejection", {
+    reason: String(reason),
+    promise: String(promise),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Global Uncaught Exception Handler
+process.on("uncaughtException", (error) => {
+  logger.error("Uncaught exception", {
+    error: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString(),
+  });
+  // Gracefully shutdown
+  process.exit(1);
+});
+
 // --- Start Server ---
 // Only listen if NOT running on Vercel (or similar environment)
 if (require.main === module) {
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    logger.info("Server started", {
+      port: PORT,
+      nodeEnv: process.env.NODE_ENV,
+      url: `http://0.0.0.0:${PORT}`,
+    });
   });
 }
 

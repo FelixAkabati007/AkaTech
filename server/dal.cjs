@@ -1,4 +1,6 @@
-const { db } = require("./db/index.cjs");
+const { getDb } = require("./db/connectionManager.cjs");
+const { withRetry, retryConfig } = require("./db/retry.cjs");
+const logger = require("./logging/logger.cjs");
 const {
   users,
   projects,
@@ -13,89 +15,111 @@ const {
 } = require("./db/schema.cjs");
 const { eq, desc, and, or, notInArray, sql } = require("drizzle-orm");
 
+// Deprecated: maintained for backward compatibility
+const { db } = require("./db/index.cjs");
+
 // Dashboard Stats
 const getDashboardStats = async () => {
-  if (!db) return null;
-  console.log("Fetching dashboard stats...");
-  try {
-    // 1. Total Users
-    const usersCount = await db
-      .select({ count: sql`count(*)` })
-      .from(users)
-      .then((res) => parseInt(res[0].count));
-    console.log("Users count fetched:", usersCount);
+  return withRetry(
+    async () => {
+      logger.info("Fetching dashboard stats...");
+      const database = await getDb();
 
-    // 2. Active Projects (not completed or rejected)
-    const activeProjectsCount = await db
-      .select({ count: sql`count(*)` })
-      .from(projects)
-      .where(notInArray(projects.status, ["completed", "rejected"]))
-      .then((res) => parseInt(res[0].count));
-    console.log("Active projects fetched:", activeProjectsCount);
+      // 1. Total Users
+      const usersCount = await database
+        .select({ count: sql`count(*)` })
+        .from(users)
+        .then((res) => parseInt(res[0].count));
+      logger.debug("Users count fetched", { usersCount });
 
-    // 3. Pending Tickets (not resolved or closed)
-    const pendingTicketsCount = await db
-      .select({ count: sql`count(*)` })
-      .from(tickets)
-      .where(notInArray(tickets.status, ["resolved", "closed"]))
-      .then((res) => parseInt(res[0].count));
-    console.log("Pending tickets fetched:", pendingTicketsCount);
+      // 2. Active Projects (not completed or rejected)
+      const activeProjectsCount = await database
+        .select({ count: sql`count(*)` })
+        .from(projects)
+        .where(notInArray(projects.status, ["completed", "rejected"]))
+        .then((res) => parseInt(res[0].count));
+      logger.debug("Active projects fetched", { activeProjectsCount });
 
-    // 4. Total Revenue (Sum of paid invoices)
-    const paidInvoices = await db
-      .select()
-      .from(invoices)
-      .where(or(eq(invoices.status, "paid"), eq(invoices.status, "Paid")));
+      // 3. Pending Tickets (not resolved or closed)
+      const pendingTicketsCount = await database
+        .select({ count: sql`count(*)` })
+        .from(tickets)
+        .where(notInArray(tickets.status, ["resolved", "closed"]))
+        .then((res) => parseInt(res[0].count));
+      logger.debug("Pending tickets fetched", { pendingTicketsCount });
 
-    const totalRevenue = paidInvoices.reduce((acc, inv) => {
-      // Remove non-numeric chars except dot
-      const cleanAmount = inv.amount ? inv.amount.replace(/[^0-9.]/g, "") : "0";
-      return acc + (parseFloat(cleanAmount) || 0);
-    }, 0);
-    console.log("Total revenue calculated:", totalRevenue);
+      // 4. Total Revenue (Sum of paid invoices)
+      const paidInvoices = await database
+        .select()
+        .from(invoices)
+        .where(or(eq(invoices.status, "paid"), eq(invoices.status, "Paid")));
 
-    // 5. Outstanding Revenue (Sum of invoices not paid/cancelled)
-    const outstandingInvoices = await db
-      .select()
-      .from(invoices)
-      .where(
-        notInArray(invoices.status, ["paid", "Paid", "cancelled", "Cancelled"])
-      );
+      const totalRevenue = paidInvoices.reduce((acc, inv) => {
+        const cleanAmount = inv.amount ? inv.amount.replace(/[^0-9.]/g, "") : "0";
+        return acc + (parseFloat(cleanAmount) || 0);
+      }, 0);
+      logger.debug("Total revenue calculated", { totalRevenue });
 
-    const outstandingRevenue = outstandingInvoices.reduce((acc, inv) => {
-      const cleanAmount = inv.amount ? inv.amount.replace(/[^0-9.]/g, "") : "0";
-      return acc + (parseFloat(cleanAmount) || 0);
-    }, 0);
-    console.log("Outstanding revenue calculated:", outstandingRevenue);
+      // 5. Outstanding Revenue (Sum of invoices not paid/cancelled)
+      const outstandingInvoices = await database
+        .select()
+        .from(invoices)
+        .where(
+          notInArray(invoices.status, ["paid", "Paid", "cancelled", "Cancelled"])
+        );
 
-    return {
-      totalUsers: usersCount,
-      activeProjects: activeProjectsCount,
-      pendingTickets: pendingTicketsCount,
-      totalRevenue,
-      outstandingRevenue,
-    };
-  } catch (error) {
-    console.error("Error in getDashboardStats:", error);
-    throw error;
-  }
+      const outstandingRevenue = outstandingInvoices.reduce((acc, inv) => {
+        const cleanAmount = inv.amount ? inv.amount.replace(/[^0-9.]/g, "") : "0";
+        return acc + (parseFloat(cleanAmount) || 0);
+      }, 0);
+      logger.debug("Outstanding revenue calculated", { outstandingRevenue });
+
+      return {
+        totalUsers: usersCount,
+        activeProjects: activeProjectsCount,
+        pendingTickets: pendingTicketsCount,
+        totalRevenue,
+        outstandingRevenue,
+      };
+    },
+    "getDashboardStats",
+    retryConfig.query
+  );
 };
 const getUserByEmail = async (email) => {
-  if (!db) return null;
-  const result = await db.select().from(users).where(eq(users.email, email));
-  return result[0];
+  return withRetry(
+    async () => {
+      const database = await getDb();
+      const result = await database.select().from(users).where(eq(users.email, email));
+      return result[0];
+    },
+    "getUserByEmail",
+    retryConfig.query
+  );
 };
 
 const getUserById = async (id) => {
-  if (!db) return null;
-  const result = await db.select().from(users).where(eq(users.id, id));
-  return result[0];
+  return withRetry(
+    async () => {
+      const database = await getDb();
+      const result = await database.select().from(users).where(eq(users.id, id));
+      return result[0];
+    },
+    "getUserById",
+    retryConfig.query
+  );
 };
 
 const createUser = async (userData) => {
-  if (!db) return null;
-  const result = await db.insert(users).values(userData).returning();
-  return result[0];
+  return withRetry(
+    async () => {
+      const database = await getDb();
+      const result = await database.insert(users).values(userData).returning();
+      return result[0];
+    },
+    "createUser",
+    retryConfig.transaction
+  );
 };
 
 const getAllUsers = async () => {
