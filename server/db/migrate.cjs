@@ -2,6 +2,7 @@ require("dotenv").config();
 const { neon } = require("@neondatabase/serverless");
 const { drizzle } = require("drizzle-orm/neon-http");
 const { migrate } = require("drizzle-orm/neon-http/migrator");
+const logger = require("../logging/logger.cjs");
 
 const runMigrate = async () => {
   if (!process.env.DATABASE_URL) {
@@ -11,15 +12,15 @@ const runMigrate = async () => {
   const sql = neon(process.env.DATABASE_URL);
   const db = drizzle(sql);
 
-  console.log("Running migrations...");
+  logger.info("Starting database migrations");
 
   await migrate(db, { migrationsFolder: "drizzle" });
 
-  console.log("Migrations completed!");
+  logger.info("Database migrations completed successfully");
   process.exit(0);
 };
 
 runMigrate().catch((err) => {
-  console.error("Migration failed!", err);
+  logger.error("Database migration failed", { message: err.message });
   process.exit(1);
 });

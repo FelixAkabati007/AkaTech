@@ -557,7 +557,10 @@ module.exports = {
         dbUsage,
       };
     } catch (error) {
-      console.error("Health Check Error:", error);
+      logger.error("Health check failed", {
+        message: error.message,
+        code: error.code
+      });
       return {
         status: "unhealthy",
         error: error.message,

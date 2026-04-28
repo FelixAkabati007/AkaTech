@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+const logger = require("./logging/logger.cjs");
 
 // Configure transporter
 // In production, these should be environment variables
@@ -12,11 +13,11 @@ const transporter = nodemailer.createTransport({
 
 const sendEmail = async (to, subject, html) => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.log("---------------------------------------------------");
-    console.log(`[Mock Email Service] To: ${to}`);
-    console.log(`[Mock Email Service] Subject: ${subject}`);
-    console.log(`[Mock Email Service] Body: ${html}`); // Simplified for log
-    console.log("---------------------------------------------------");
+    logger.debug("Mock email service", { 
+      to, 
+      subject,
+      note: "Email credentials not configured - running in mock mode"
+    });
     return;
   }
 
@@ -27,9 +28,9 @@ const sendEmail = async (to, subject, html) => {
       subject,
       html,
     });
-    console.log(`Email sent to ${to}`);
+    logger.info("Email sent", { to });
   } catch (error) {
-    console.error("Failed to send email:", error);
+    logger.error("Email send failed", { to, message: error.message });
   }
 };
 
@@ -71,15 +72,12 @@ const sendInvoiceEmail = async (to, invoiceData, pdfBuffer) => {
   `;
 
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.log("---------------------------------------------------");
-    console.log(`[Mock Email Service] To: ${to}`);
-    console.log(`[Mock Email Service] Subject: ${subject}`);
-    console.log(
-      `[Mock Email Service] Attachment: Invoice PDF (${
-        pdfBuffer ? pdfBuffer.length : 0
-      } bytes)`
-    );
-    console.log("---------------------------------------------------");
+    logger.debug("Mock invoice email service", { 
+      to, 
+      subject,
+      attachmentSize: pdfBuffer ? pdfBuffer.length : 0,
+      note: "Email credentials not configured - running in mock mode"
+    });
     return;
   }
 
@@ -97,9 +95,9 @@ const sendInvoiceEmail = async (to, invoiceData, pdfBuffer) => {
         },
       ],
     });
-    console.log(`Invoice email sent to ${to}`);
+    logger.info("Invoice email sent", { to });
   } catch (error) {
-    console.error("Failed to send invoice email:", error);
+    logger.error("Invoice email send failed", { to, message: error.message });
   }
 };
 

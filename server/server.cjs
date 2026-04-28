@@ -37,15 +37,13 @@ const ALLOWED_ORIGINS = [
 ];
 
 if (!process.env.GOOGLE_CLIENT_ID) {
-  console.warn(
-    "WARNING: GOOGLE_CLIENT_ID is not set in environment variables. Google Auth will fail."
+  logger.warn(
+    "GOOGLE_CLIENT_ID is not set in environment variables. Google Auth will fail."
   );
 } else {
-  console.log(
-    `Google Auth configured with Client ID: ${process.env.GOOGLE_CLIENT_ID.substring(
-      0,
-      10
-    )}...`
+  logger.info(
+    "Google Auth configured",
+    { clientIdPrefix: process.env.GOOGLE_CLIENT_ID.substring(0, 10) }
   );
 }
 
@@ -65,17 +63,23 @@ setInterval(() => {
 }, 5000); // Send heartbeat every 5 seconds
 
 io.on("connection", (socket) => {
-  console.log(`Client connected: ${socket.id}`);
+  logger.debug("WebSocket client connected", { socketId: socket.id });
 
   socket.on("disconnect", (reason) => {
-    console.log(`Client disconnected: ${socket.id}, reason: ${reason}`);
+    logger.debug("WebSocket client disconnected", { 
+      socketId: socket.id, 
+      reason 
+    });
   });
 });
 
 const PORT = process.env.PORT || 3001;
 const SECRET_KEY = process.env.JWT_SECRET;
 if (!SECRET_KEY) {
-  console.error("FATAL: JWT_SECRET is not defined in .env");
+  logger.error("FATAL: JWT_SECRET is not defined in .env", {
+    severity: "CRITICAL",
+    action: "Server shutdown"
+  });
   process.exit(1);
 }
 
@@ -89,16 +93,11 @@ app.use(
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-      if (
-        ALLOWED_ORIGINS.indexOf(origin) !== -1 ||
-        origin.endsWith(".vercel.app")
-      ) {
+      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
         callback(null, true);
       } else {
-        console.warn("Blocked by CORS:", origin);
-        callback(new Error("Not allowed by CORS"));
+        logger.warn("CORS blocked for origin", { origin });
+        callback(new Error("CORS not allowed"));
       }
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -116,7 +115,12 @@ app.use(cookieParser());
 
 // Request Logger
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+  logger.debug("HTTP request", {
+    method: req.method,
+    path: req.path,
+    url: req.url,
+    ip: req.ip
+  });
   next();
 });
 
@@ -208,7 +212,11 @@ const authenticateToken = async (req, res, next) => {
         .status(403)
         .json({ error: "Forbidden", message: "Invalid or expired token" });
     }
-    console.error("Auth Middleware Error:", err);
+    logger.error("Auth middleware error", {
+      errorName: err.name,
+      message: err.message,
+      path: req.path
+    });
     return res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -231,7 +239,7 @@ app.post("/api/webhooks/payment", async (req, res) => {
     const paystackSignature = req.headers["x-paystack-signature"];
     const stripeSignature = req.headers["stripe-signature"];
 
-    console.log(`Webhook received from ${provider || "unknown"}:`, req.body);
+    logger.info("Payment webhook received", { provider: provider || "unknown" });
 
     // Signature Verification (Paystack)
     if (process.env.PAYSTACK_SECRET_KEY && paystackSignature) {
@@ -241,10 +249,10 @@ app.post("/api/webhooks/payment", async (req, res) => {
         .digest("hex");
 
       if (hash !== paystackSignature) {
-        console.warn("Invalid Paystack signature");
+        logger.warn("Invalid Paystack signature", { reference });
         return res.status(401).json({ error: "Invalid signature" });
       }
-      console.log("Paystack signature verified");
+      logger.info("Paystack webhook signature verified", { reference });
     }
 
     // Signature Verification (Stripe)
@@ -265,12 +273,15 @@ app.post("/api/webhooks/payment", async (req, res) => {
           .digest("hex");
 
         if (hash !== v1) {
-          console.warn("Invalid Stripe signature");
+          logger.warn("Invalid Stripe signature", { reference });
           return res.status(401).json({ error: "Invalid signature" });
         }
-        console.log("Stripe signature verified");
+        logger.info("Stripe webhook signature verified", { reference });
       } catch (err) {
-        console.warn("Stripe verification failed:", err.message);
+        logger.warn("Stripe verification failed", { 
+          message: err.message,
+          reference 
+        });
         return res.status(401).json({ error: "Invalid signature" });
       }
     }
@@ -335,9 +346,10 @@ app.post("/api/webhooks/payment", async (req, res) => {
                   startDate: new Date(),
                   updatedAt: new Date(),
                 });
-                console.log(
-                  `Activated subscription ${pendingSub.id} for user ${invoice.userId}`
-                );
+                logger.info("Subscription activated from webhook", { 
+                  subscriptionId: pendingSub.id, 
+                  userId: invoice.userId 
+                });
                 // Notify User about subscription
                 await dal.createNotification({
                   userId: invoice.userId,
@@ -348,10 +360,10 @@ app.post("/api/webhooks/payment", async (req, res) => {
                 });
               }
             } catch (subError) {
-              console.error(
-                "Error activating subscription from webhook:",
-                subError
-              );
+              logger.error("Subscription activation from webhook failed", {
+                invoiceId: invoice.id,
+                message: subError?.message
+              });
             }
           }
 
@@ -372,20 +384,20 @@ app.post("/api/webhooks/payment", async (req, res) => {
           // Send Email Receipt
           const user = await dal.getUserById(invoice.userId);
           if (user) {
-            sendInvoiceEmail(user, invoice, "receipt").catch(console.error);
+            sendInvoiceEmail(user, invoice, "receipt").catch((err) => 
+              logger.error("Invoice email send failed", { message: err?.message })
+            );
           }
         }
       } else {
-        console.warn(
-          `Invoice not found for webhook reference: ${finalReference}`
-        );
+        logger.warn("Invoice not found for webhook reference", { finalReference });
         // Don't return 404 to avoid retries from provider
       }
     }
 
     res.json({ received: true });
   } catch (e) {
-    console.error("Webhook Error:", e);
+    logger.error("Webhook processing error", { message: e?.message });
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -491,8 +503,8 @@ app.post("/api/signup/verify-google", async (req, res) => {
     // Send security notification for admin login
     if (user.role === "admin") {
       // Intentionally not awaiting to avoid blocking response
-      sendLoginNotification(user.email, req.ip, req.get("User-Agent")).catch(
-        console.error
+      sendLoginNotification(user.email, req.ip, req.get("User-Agent")).catch((err) =>
+        logger.error("Login notification failed", { message: err?.message })
       );
     }
 
@@ -518,7 +530,10 @@ app.post("/api/signup/verify-google", async (req, res) => {
       email: user.email,
     });
   } catch (error) {
-    console.error("Google Auth Error:", error);
+    logger.error("Google authentication failed", {
+      message: error.message,
+      code: error.code
+    });
     res
       .status(401)
       .json({ error: "Authentication failed", details: error.message });
@@ -561,7 +576,7 @@ app.post("/api/auth/change-password", authenticateToken, async (req, res) => {
 
     res.json({ message: "Password updated successfully" });
   } catch (error) {
-    console.error("Change Password Error:", error);
+    logger.error("Change password failed", { message: error.message });
     res.status(500).json({ error: "Failed to change password" });
   }
 });
@@ -655,7 +670,7 @@ app.get(
       const safeClients = clients.map(({ passwordHash, ...client }) => client);
       res.json(safeClients);
     } catch (error) {
-      console.error("Get Clients Error:", error);
+      logger.error("Failed to get clients", { message: error.message });
       res.status(500).json({ error: "Failed to fetch clients" });
     }
   }
@@ -671,7 +686,7 @@ app.get(
       const projects = await dal.getAllProjects();
       res.json(projects);
     } catch (error) {
-      console.error("Get Projects Error:", error);
+      logger.error("Failed to get projects", { message: error.message });
       res.status(500).json({ error: "Failed to fetch projects" });
     }
   }
@@ -695,7 +710,7 @@ app.post(
       });
       res.status(201).json(newProject);
     } catch (error) {
-      console.error("Create Project Error:", error);
+      logger.error("Failed to create project", { message: error.message });
       res.status(500).json({ error: "Failed to create project" });
     }
   }
@@ -717,7 +732,7 @@ app.put(
       });
       res.json(updatedProject);
     } catch (error) {
-      console.error("Update Project Error:", error);
+      logger.error("Failed to update project", { message: error.message });
       res.status(500).json({ error: "Failed to update project" });
     }
   }
@@ -733,7 +748,7 @@ app.delete(
       await dal.deleteProject(id);
       res.json({ message: "Project deleted successfully" });
     } catch (error) {
-      console.error("Delete Project Error:", error);
+      logger.error("Failed to delete project", { message: error.message });
       res.status(500).json({ error: "Failed to delete project" });
     }
   }
@@ -866,7 +881,7 @@ app.post(
 
       res.status(201).json(newInvoice);
     } catch (error) {
-      console.error("Invoice generation error:", error);
+      logger.error("Invoice generation failed", { message: error.message });
       res.status(500).json({ error: "Failed to generate invoice" });
     }
   }
@@ -921,7 +936,7 @@ app.post("/api/invoices/request", authenticateToken, async (req, res) => {
       invoice: { ...newInvoice, description: message },
     });
   } catch (error) {
-    console.error("Invoice Request Error:", error);
+    logger.error("Invoice request failed", { message: error.message });
     res.status(500).json({ error: "Failed to submit invoice request." });
   }
 });
@@ -1037,7 +1052,7 @@ app.post("/api/signup/complete", async (req, res) => {
     const { passwordHash, ...safeUser } = user;
     res.json({ token, user: { ...safeUser, hasPassword: !!passwordHash } });
   } catch (error) {
-    console.error("Signup Complete Error:", error);
+    logger.error("Signup completion failed", { message: error.message });
     res.status(500).json({ error: "Failed to complete signup" });
   }
 });
@@ -1052,7 +1067,7 @@ app.get("/api/client/invoices", authenticateToken, async (req, res) => {
     }));
     res.json(decryptedInvoices);
   } catch (error) {
-    console.error("Get Invoices Error:", error);
+    logger.error("Failed to get invoices", { message: error.message });
     res.status(500).json({ error: "Failed to fetch invoices." });
   }
 });
@@ -1079,7 +1094,7 @@ app.delete("/api/client/invoices/:id", authenticateToken, async (req, res) => {
     await dal.deleteInvoice(id);
     res.json({ message: "Invoice request deleted successfully" });
   } catch (error) {
-    console.error("Delete Client Invoice Error:", error);
+    logger.error("Failed to delete client invoice", { message: error.message });
     res.status(500).json({ error: "Failed to delete invoice request." });
   }
 });
@@ -1110,7 +1125,7 @@ app.patch("/api/client/invoices/:id", authenticateToken, async (req, res) => {
     const updatedInvoice = await dal.updateInvoice(id, updates);
     res.json({ ...updatedInvoice, description: message });
   } catch (error) {
-    console.error("Update Client Invoice Error:", error);
+    logger.error("Failed to update client invoice", { message: error.message });
     res.status(500).json({ error: "Failed to update invoice request." });
   }
 });
@@ -1217,7 +1232,7 @@ app.post(
         invoice: { ...updatedInvoice, description: newDesc },
       });
     } catch (error) {
-      console.error("Payment Processing Error:", error);
+      logger.error("Payment processing failed", { message: error.message });
       res.status(500).json({ error: "Failed to process payment." });
     }
   }
@@ -1236,7 +1251,7 @@ app.get("/api/admin/invoices", authenticateToken, async (req, res) => {
     }));
     res.json(decryptedInvoices);
   } catch (error) {
-    console.error("Get Admin Invoices Error:", error);
+    logger.error("Failed to get admin invoices", { message: error.message });
     res.status(500).json({ error: "Failed to fetch invoices." });
   }
 });
@@ -1274,7 +1289,7 @@ app.post("/api/admin/invoices", authenticateToken, async (req, res) => {
 
     res.status(201).json(newInvoice);
   } catch (error) {
-    console.error("Create Invoice Error:", error);
+    logger.error("Failed to create invoice", { message: error.message });
     res.status(500).json({ error: "Failed to create invoice" });
   }
 });
@@ -1317,7 +1332,7 @@ app.patch("/api/admin/invoices/:id", authenticateToken, async (req, res) => {
     io.emit("invoice_updated", updatedInvoice);
     res.json(updatedInvoice);
   } catch (error) {
-    console.error("Update Invoice Error:", error);
+    logger.error("Failed to update invoice", { message: error.message });
     res.status(500).json({ error: "Failed to update invoice" });
   }
 });
@@ -1340,7 +1355,7 @@ app.delete("/api/admin/invoices/:id", authenticateToken, async (req, res) => {
     await logAudit("DELETE_INVOICE", req.user.username, { invoiceId: id });
     res.json({ message: "Invoice deleted" });
   } catch (error) {
-    console.error("Delete Invoice Error:", error);
+    logger.error("Failed to delete invoice", { message: error.message });
     res.status(500).json({ error: "Failed to delete invoice" });
   }
 });
@@ -1355,7 +1370,7 @@ app.get(
       const stats = await dal.getDashboardStats();
       res.json(stats);
     } catch (error) {
-      console.error("Dashboard Stats Error:", error);
+      logger.error("Dashboard stats retrieval failed", { message: error.message });
       res.status(500).json({ error: "Failed to fetch dashboard stats" });
     }
   }
@@ -1399,7 +1414,7 @@ app.get(
         database: dbHealth,
       });
     } catch (error) {
-      console.error("System Health Error:", error);
+      logger.error("System health check failed", { message: error.message });
       res.status(500).json({ error: "Failed to fetch system health" });
     }
   }
@@ -1413,7 +1428,7 @@ app.get("/api/admin/audit-logs", authenticateToken, async (req, res) => {
     const logs = await dal.getAllAuditLogs();
     res.json(logs);
   } catch (error) {
-    console.error("Get Audit Logs Error:", error);
+    logger.error("Failed to get audit logs", { message: error.message });
     res.status(500).json({ error: "Failed to fetch audit logs." });
   }
 });
@@ -1612,7 +1627,7 @@ app.post("/api/login", async (req, res) => {
     const { passwordHash, ...safeUser } = user;
     res.json({ token, user: { ...safeUser, hasPassword: !!passwordHash } });
   } catch (error) {
-    console.error("Login Error:", error);
+    logger.error("Login failed", { message: error.message });
     res.status(500).json({ error: "Login failed" });
   }
 });
@@ -1638,7 +1653,7 @@ app.get("/api/projects/options", async (req, res) => {
     // Fallback to constants
     res.json(PROJECT_TYPES);
   } catch (error) {
-    console.error("Get Project Options Error:", error);
+    logger.error("Failed to get project options", { message: error.message });
     res.status(500).json({ error: "Failed to fetch project options" });
   }
 });
@@ -1664,7 +1679,7 @@ app.put(
 
       res.json({ message: "Project options updated" });
     } catch (error) {
-      console.error("Update Project Options Error:", error);
+      logger.error("Failed to update project options", { message: error.message });
       res.status(500).json({ error: "Failed to update project options" });
     }
   }
@@ -1696,7 +1711,7 @@ app.patch(
 
       res.json(updatedInvoice);
     } catch (error) {
-      console.error("Verify Invoice Error:", error);
+      logger.error("Invoice verification failed", { message: error.message });
       res.status(500).json({ error: "Failed to verify invoice" });
     }
   }
@@ -1853,7 +1868,7 @@ app.post("/api/subscriptions", authenticateToken, async (req, res) => {
       // Update subscription with invoice reference? Not in schema, but useful.
     }
   } catch (err) {
-    console.error("Auto-Invoice Error:", err);
+    logger.error("Auto-invoice generation failed", { message: err.message });
     // Don't fail subscription creation if invoice fails
   }
 
@@ -1926,7 +1941,7 @@ app.patch(
             });
           }
         } catch (err) {
-          console.error("Error activating project:", err);
+          logger.error("Project activation failed", { message: err.message });
         }
 
         io.emit("new_project", {
@@ -2003,7 +2018,7 @@ app.put(
       });
       res.json(updatedSub);
     } catch (error) {
-      console.error("Update Subscription Error:", error);
+      logger.error("Subscription update failed", { message: error.message });
       res.status(500).json({ error: "Failed to update subscription" });
     }
   }
@@ -2025,7 +2040,7 @@ app.delete(
       await logAudit("DELETE_SUBSCRIPTION", req.user.username, { subId: id });
       res.json({ message: "Subscription deleted successfully" });
     } catch (error) {
-      console.error("Delete Subscription Error:", error);
+      logger.error("Subscription deletion failed", { message: error.message });
       res.status(500).json({ error: "Failed to delete subscription" });
     }
   }
@@ -2085,7 +2100,7 @@ app.post("/api/invoices/generate", authenticateToken, async (req, res) => {
 
     res.status(201).json(newInvoice);
   } catch (error) {
-    console.error("Invoice Generation Error:", error);
+    logger.error("Invoice generation failed", { message: error.message });
     res.status(500).json({ error: "Failed to generate invoice" });
   }
 });
@@ -2214,9 +2229,8 @@ app.patch(
 
 // 10. Google Verification
 app.post("/api/signup/verify-google", async (req, res) => {
-  console.log("Verify Google Request Body:", req.body);
   const { token } = req.body;
-  console.log("GOOGLE_CLIENT_ID:", process.env.GOOGLE_CLIENT_ID);
+  logger.debug("Google verification requested");
 
   if (!token) return res.status(400).json({ error: "Token is required" });
 
@@ -2245,11 +2259,11 @@ app.post("/api/signup/verify-google", async (req, res) => {
         signupToken,
       });
     } else {
-      console.warn(`Google email not verified for ${email}`);
-      res.status(400).json({ error: "Google email not verified" });
+      logger.warn("Google email not verified");
+      res.status(400).json({ error: "Email not verified" });
     }
   } catch (error) {
-    console.error("Google verification error:", error);
+    logger.error("Google verification failed", { message: error.message });
     // Provide more specific error messages if possible
     const errorMessage = error.message || "Invalid Google Token";
     res
@@ -2289,7 +2303,7 @@ app.get("/api/signup/progress", async (req, res) => {
     const data = JSON.parse(decrypt(record.data));
     res.json({ data });
   } catch (e) {
-    console.error("Decrypt error:", e);
+    logger.error("Decryption failed", { message: e.message });
     res.status(500).json({ error: "Failed to decrypt data" });
   }
 });
@@ -2308,7 +2322,7 @@ app.post("/api/signup/complete", async (req, res) => {
           isVerified = true;
         }
       } catch (err) {
-        console.warn("Invalid signup token:", err.message);
+        logger.warn("Invalid signup token");
       }
     }
 
@@ -2429,7 +2443,7 @@ app.post("/api/signup/complete", async (req, res) => {
         });
       }
     } catch (invError) {
-      console.error("Auto-Invoice Generation Error:", invError);
+      logger.error("Auto-invoice generation failed", { message: invError.message });
       // Continue without failing signup
     }
 
@@ -2464,7 +2478,7 @@ app.post("/api/signup/complete", async (req, res) => {
       user: { ...user, password: undefined },
     });
   } catch (error) {
-    console.error("Signup Completion Error:", error);
+    logger.error("Signup completion failed", { message: error.message });
     res.status(500).json({ error: "Signup failed" });
   }
 });
@@ -2474,7 +2488,7 @@ app.post("/api/webhooks/payment", async (req, res) => {
   // In a real scenario, verify signature from payment provider (e.g., Paystack/Stripe signature)
   const { reference, status, amount, externalId } = req.body;
 
-  console.log("Payment Webhook Received:", req.body);
+  logger.info("Payment webhook received", { reference, status });
 
   if (!reference || !status) {
     return res.status(400).json({ error: "Invalid payload" });
@@ -2493,7 +2507,7 @@ app.post("/api/webhooks/payment", async (req, res) => {
 
     if (!invoice) {
       // If not found by invoice reference, maybe it's a payment transaction reference
-      console.warn(`Invoice not found for webhook reference: ${reference}`);
+      logger.warn("Invoice not found for webhook reference", { reference });
       return res.status(404).json({ message: "Invoice not found" });
     }
 
@@ -2537,7 +2551,7 @@ app.post("/api/webhooks/payment", async (req, res) => {
 
     res.status(200).json({ received: true });
   } catch (error) {
-    console.error("Webhook processing error:", error);
+    logger.error("Webhook processing failed", { message: error.message });
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -2609,7 +2623,7 @@ app.patch("/api/:resource/:id", authenticateToken, async (req, res) => {
     io.emit(`update_${resource}`, updatedItem); // Notify clients
     res.json(updatedItem);
   } catch (error) {
-    console.error(`Update error for ${resource}:`, error);
+    logger.error("Resource update failed", { resource, message: error.message });
     res.status(500).json({ error: "Update failed" });
   }
 });
@@ -2638,7 +2652,7 @@ app.delete("/api/:resource/:id", authenticateToken, async (req, res) => {
     io.emit(`delete_${resource}`, id); // Notify clients
     res.json({ message: "Deleted successfully" });
   } catch (error) {
-    console.error(`Delete error for ${resource}:`, error);
+    logger.error("Resource deletion failed", { resource, message: error.message });
     res.status(500).json({ error: "Delete failed" });
   }
 });
@@ -2706,7 +2720,7 @@ app.get("/api/settings", async (req, res) => {
     const bankDetails = await dal.getSystemSetting("bank_details");
     res.json(bankDetails?.value || {});
   } catch (err) {
-    console.error("Error fetching settings:", err);
+    logger.error("Settings retrieval failed", { message: err.message });
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -2727,7 +2741,7 @@ app.put(
       });
       res.json(updated.value);
     } catch (err) {
-      console.error("Error saving settings:", err);
+      logger.error("Settings save failed", { message: err.message });
       res.status(500).json({ error: "Internal Server Error" });
     }
   }
@@ -2735,19 +2749,14 @@ app.put(
 
 // --- Global Error Handler ---
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  logger.error("Unexpected error", { stack: err?.stack });
   res
     .status(500)
     .json({ error: "Internal Server Error", details: err.message });
 });
 
 // --- Socket.io ---
-io.on("connection", (socket) => {
-  console.log("Client connected");
-  socket.on("disconnect", () => {
-    console.log("Client disconnected");
-  });
-});
+// Note: Connection logging already handled above with logger.debug()
 
 // Error Handler Middleware (must be after all other middleware/routes)
 app.use(errorHandler);

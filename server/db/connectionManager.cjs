@@ -17,7 +17,7 @@ class ConnectionManager {
 
   async initialize() {
     if (this.initialized) {
-      console.log("[ConnectionManager] Already initialized");
+      logger.debug("Connection manager already initialized");
       return this.db;
     }
 
@@ -44,10 +44,10 @@ class ConnectionManager {
       this.db = drizzle(this.pool, { schema });
       this.initialized = true;
 
-      console.log("[ConnectionManager] Successfully initialized");
+      logger.info("Connection manager initialized successfully");
       return this.db;
     } catch (error) {
-      console.error("[ConnectionManager] Initialization failed:", error);
+      logger.error("Connection manager initialization failed", { message: error.message });
       throw new Error(`Database initialization failed: ${error.message}`);
     }
   }
@@ -56,22 +56,17 @@ class ConnectionManager {
     this.pool.on("connect", () => {
       this.metrics.totalConnections++;
       this.metrics.activeConnections++;
-      console.log("[Pool] Connection established", {
-        active: this.metrics.activeConnections,
-        total: this.metrics.totalConnections,
-      });
+      logger.debug("Database connection established");
     });
 
     this.pool.on("error", (err) => {
       this.metrics.failedConnections++;
-      console.error("[Pool] Unexpected error on idle client:", err);
+      logger.error("Pool idle client error", { message: err.message });
     });
 
     this.pool.on("remove", () => {
       this.metrics.activeConnections--;
-      console.log("[Pool] Client removed", {
-        active: this.metrics.activeConnections,
-      });
+      logger.debug("Database client removed");
     });
   }
 
@@ -114,7 +109,7 @@ class ConnectionManager {
       await this.pool.end();
       this.initialized = false;
       this.db = null;
-      console.log("[ConnectionManager] Pool closed");
+      logger.info("Database pool closed");
     }
   }
 }
