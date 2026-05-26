@@ -19,6 +19,44 @@ import AdinkraBackground from "@components/ui/AdinkraBackground";
 import { useTheme } from "./hooks/useTheme";
 import { Analytics } from "@vercel/analytics/react";
 
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("App section failed to render:", error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <main className="min-h-screen bg-white px-6 py-24 text-gray-900 dark:bg-akatech-black dark:text-white">
+          <div className="mx-auto max-w-2xl rounded-lg border border-akatech-gold/30 bg-white/90 p-8 shadow-xl dark:bg-akatech-card">
+            <p className="mb-2 text-xs font-bold uppercase tracking-widest text-akatech-gold">
+              Preview recovered
+            </p>
+            <h1 className="mb-4 text-3xl font-serif">
+              This section could not load.
+            </h1>
+            <p className="text-gray-600 dark:text-gray-300">
+              The rest of the site is still available. Refresh the page after
+              checking the browser console or local configuration.
+            </p>
+          </div>
+        </main>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 // Lazy load pages
 const Dashboard = lazy(() =>
   import("./pages/Dashboard").then((module) => ({ default: module.Dashboard }))
@@ -167,11 +205,12 @@ export default function App() {
   };
 
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const isGoogleAuthAvailable = Boolean(googleClientId);
 
   useEffect(() => {
-    if (!googleClientId) {
-      console.error(
-        "Critical Error: VITE_GOOGLE_CLIENT_ID is missing in environment variables. Google Auth will fail."
+    if (!isGoogleAuthAvailable) {
+      console.warn(
+        "VITE_GOOGLE_CLIENT_ID is missing. Google auth is disabled in this local preview."
       );
     } else {
       // Debug log to ensure Client ID is loaded (masked for security)
@@ -180,19 +219,14 @@ export default function App() {
         googleClientId.substring(0, 10) + "..."
       );
     }
-  }, [googleClientId]);
+  }, [googleClientId, isGoogleAuthAvailable]);
 
-  return (
-    <GoogleOAuthProvider
-      clientId={googleClientId}
-      onScriptLoadError={() =>
-        console.error("Google Sign-In script failed to load")
-      }
-    >
-      <div className={`min-h-screen ${mode} transition-colors duration-300`}>
-        <Analytics />
-        <ToastProvider>
-          <SyncStatusProvider>
+  const appContent = (
+    <div className={`min-h-screen ${mode} transition-colors duration-300`}>
+      <Analytics />
+      <ToastProvider>
+        <SyncStatusProvider>
+          <AppErrorBoundary>
             <div className="bg-white dark:bg-akatech-black text-gray-900 dark:text-white min-h-screen transition-colors duration-300">
               {/* <AdinkraBackground /> */}
               <img
@@ -286,12 +320,28 @@ export default function App() {
                 onClose={() => setAuthModalOpen(false)}
                 onLogin={handleLogin}
                 onGoogleLogin={handleGoogleLogin}
+                isGoogleAuthAvailable={isGoogleAuthAvailable}
               />
               <Toaster position="top-center" />
             </div>
-          </SyncStatusProvider>
-        </ToastProvider>
-      </div>
-    </GoogleOAuthProvider>
+          </AppErrorBoundary>
+        </SyncStatusProvider>
+      </ToastProvider>
+    </div>
+  );
+
+  return (
+    isGoogleAuthAvailable ? (
+      <GoogleOAuthProvider
+        clientId={googleClientId}
+        onScriptLoadError={() =>
+          console.error("Google Sign-In script failed to load")
+        }
+      >
+        {appContent}
+      </GoogleOAuthProvider>
+    ) : (
+      appContent
+    )
   );
 }

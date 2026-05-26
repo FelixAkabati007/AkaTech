@@ -26,6 +26,10 @@ vi.mock("@components/ui/Icons", () => ({
     PenTool: () => <div data-testid="icon-pen-tool" />,
     Trash: () => <div data-testid="icon-trash" />,
     Loader: () => <div data-testid="icon-loader" />,
+    Download: () => <div data-testid="icon-download" />,
+    RefreshCw: () => <div data-testid="icon-refresh" />,
+    ArrowUp: () => <div data-testid="icon-arrow-up" />,
+    ArrowDown: () => <div data-testid="icon-arrow-down" />,
   },
 }));
 
@@ -85,7 +89,7 @@ describe("AdminClients Component", () => {
 
     // Default fetch mocks
     global.fetch.mockImplementation((url) => {
-      if (url.includes("/api/users")) {
+      if (url.includes("/api/admin/clients")) {
         return Promise.resolve({
           ok: true,
           json: () =>
@@ -203,7 +207,7 @@ describe("AdminClients Component", () => {
         return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
       }
       // Keep other mocks
-      if (url.includes("/api/users")) {
+      if (url.includes("/api/admin/clients")) {
         return Promise.resolve({
           ok: true,
           json: () =>

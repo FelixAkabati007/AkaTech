@@ -18,6 +18,13 @@ vi.mock("@components/ui/Icons", () => ({
     Lock: () => <div data-testid="icon-lock" />,
     X: () => <div data-testid="icon-x" />,
     Loader: () => <div data-testid="icon-loader" />,
+    Plus: () => <div data-testid="icon-plus" />,
+    Search: () => <div data-testid="icon-search" />,
+    DollarSign: () => <div data-testid="icon-dollar-sign" />,
+    AlertCircle: () => <div data-testid="icon-alert-circle" />,
+    Calendar: () => <div data-testid="icon-calendar" />,
+    Edit: () => <div data-testid="icon-edit" />,
+    Trash: () => <div data-testid="icon-trash" />,
   },
 }));
 

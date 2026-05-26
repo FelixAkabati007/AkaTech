@@ -5,19 +5,8 @@ import { Icons } from "@components/ui/Icons";
 import { Logo } from "@components/ui/Logo";
 import { useToast } from "@components/ui/ToastProvider";
 
-export const AuthModal = ({
-  isOpen,
-  onClose,
-  onLogin,
-  onSignup,
-  onGoogleLogin,
-}) => {
-  const [isLoginView, setIsLoginView] = useState(true);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+const GoogleAuthButton = ({ isLoginView, onGoogleLogin }) => {
   const { addToast } = useToast();
-  const modalRef = useRef(null);
-
   const googleLogin = useGoogleLogin({
     onSuccess: (tokenResponse) => {
       if (onGoogleLogin) {
@@ -27,6 +16,33 @@ export const AuthModal = ({
     },
     onError: () => addToast("Google Sign In Failed", "error"),
   });
+
+  return (
+    <button
+      onClick={() => googleLogin()}
+      className="w-full bg-gray-50 dark:bg-white text-black py-3 mb-6 flex items-center justify-center gap-3 hover:bg-gray-100 dark:hover:bg-gray-200 transition border border-gray-200 dark:border-transparent"
+    >
+      <Icons.Google className="w-5 h-5" />
+      <span className="text-xs font-bold uppercase tracking-wider">
+        {isLoginView ? "Sign in with Google" : "Sign up with Google"}
+      </span>
+    </button>
+  );
+};
+
+export const AuthModal = ({
+  isOpen,
+  onClose,
+  onLogin,
+  onSignup,
+  onGoogleLogin,
+  isGoogleAuthAvailable = true,
+}) => {
+  const [isLoginView, setIsLoginView] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const { addToast } = useToast();
+  const modalRef = useRef(null);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -149,15 +165,17 @@ export const AuthModal = ({
               </p>
             </div>
 
-            <button
-              onClick={() => googleLogin()}
-              className="w-full bg-gray-50 dark:bg-white text-black py-3 mb-6 flex items-center justify-center gap-3 hover:bg-gray-100 dark:hover:bg-gray-200 transition border border-gray-200 dark:border-transparent"
-            >
-              <Icons.Google className="w-5 h-5" />
-              <span className="text-xs font-bold uppercase tracking-wider">
-                {isLoginView ? "Sign in with Google" : "Sign up with Google"}
-              </span>
-            </button>
+            {isGoogleAuthAvailable ? (
+              <GoogleAuthButton
+                isLoginView={isLoginView}
+                onGoogleLogin={onGoogleLogin}
+              />
+            ) : (
+              <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-left text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+                Google sign-in is not configured for this local preview. Email
+                login is still available.
+              </div>
+            )}
 
             <div className="flex items-center gap-4 mb-6">
               <div className="h-[1px] bg-gray-200 dark:bg-white/10 flex-1"></div>

@@ -14,6 +14,8 @@ const StepSignup = ({ onVerify, loading }) => {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [authMode, setAuthMode] = useState("login"); // 'login' or 'signup'
   const online = useOnlineStatus();
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const canUseGoogle = online && Boolean(googleClientId);
 
   return (
     <div className="max-w-md mx-auto space-y-6">
@@ -57,6 +59,12 @@ const StepSignup = ({ onVerify, loading }) => {
             You appear to be offline. Google Sign-In is unavailable.
           </div>
         )}
+        {online && !googleClientId && (
+          <div className="p-3 bg-yellow-50 text-yellow-700 text-sm rounded-lg flex items-center gap-2">
+            <Icons.AlertTriangle size={16} />
+            Google Sign-In is not configured for this local preview.
+          </div>
+        )}
         {error && (
           <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2">
             <Icons.AlertTriangle size={16} />
@@ -97,57 +105,68 @@ const StepSignup = ({ onVerify, loading }) => {
             authMode === "signup" && !termsAccepted
               ? "opacity-50 pointer-events-none"
               : ""
-          } ${!online ? "opacity-50 pointer-events-none" : ""}`}
+          } ${!canUseGoogle ? "opacity-50 pointer-events-none" : ""}`}
         >
           {loading && (
             <div className="absolute inset-0 z-10 bg-white/50 dark:bg-black/50 flex items-center justify-center rounded-full">
               <div className="w-6 h-6 border-2 border-akatech-gold border-t-transparent rounded-full animate-spin"></div>
             </div>
           )}
-          <GoogleLogin
-            ux_mode="popup"
-            locale="en"
-            onSuccess={(credentialResponse) => {
-              console.log("Google Login Success:", credentialResponse);
-              setError(""); // Clear previous errors
-              onVerify("google", {
-                token: credentialResponse.credential,
-                mode: authMode,
-              }).catch((err) => {
-                console.error("Google verify error:", err);
-                if (
-                  err.message &&
-                  err.message.toLowerCase().includes("already exists")
-                ) {
-                  setError(
-                    <span>
-                      Account already exists.{" "}
-                      <button
-                        onClick={() => setAuthMode("login")}
-                        className="underline font-bold hover:text-red-800"
-                      >
-                        Switch to Login
-                      </button>
-                    </span>
-                  );
-                } else {
-                  setError(
-                    err.message ||
-                      "Google verification failed. Please try again."
-                  );
-                }
-              });
-            }}
-            onError={() => {
-              console.error("Google Login Failed (onError triggered)");
-              setError("Google Login Failed. Please try again.");
-            }}
-            theme="filled_blue"
-            shape="pill"
-            text={authMode === "signup" ? "signup_with" : "signin_with"}
-            logo_alignment="left"
-            width="250"
-          />
+          {canUseGoogle ? (
+            <GoogleLogin
+              ux_mode="popup"
+              locale="en"
+              onSuccess={(credentialResponse) => {
+                console.log("Google Login Success:", credentialResponse);
+                setError(""); // Clear previous errors
+                onVerify("google", {
+                  token: credentialResponse.credential,
+                  mode: authMode,
+                }).catch((err) => {
+                  console.error("Google verify error:", err);
+                  if (
+                    err.message &&
+                    err.message.toLowerCase().includes("already exists")
+                  ) {
+                    setError(
+                      <span>
+                        Account already exists.{" "}
+                        <button
+                          onClick={() => setAuthMode("login")}
+                          className="underline font-bold hover:text-red-800"
+                        >
+                          Switch to Login
+                        </button>
+                      </span>
+                    );
+                  } else {
+                    setError(
+                      err.message ||
+                        "Google verification failed. Please try again."
+                    );
+                  }
+                });
+              }}
+              onError={() => {
+                console.error("Google Login Failed (onError triggered)");
+                setError("Google Login Failed. Please try again.");
+              }}
+              theme="filled_blue"
+              shape="pill"
+              text={authMode === "signup" ? "signup_with" : "signin_with"}
+              logo_alignment="left"
+              width="250"
+            />
+          ) : (
+            <button
+              type="button"
+              disabled
+              data-testid="google-login"
+              className="min-h-[48px] rounded-full bg-gray-200 px-6 text-sm font-bold text-gray-500 dark:bg-white/10 dark:text-gray-400"
+            >
+              Google Sign-In Unavailable
+            </button>
+          )}
         </div>
       </div>
     </div>
