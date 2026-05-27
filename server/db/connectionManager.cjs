@@ -118,9 +118,14 @@ let manager = null;
 
 async function getConnectionManager() {
   if (!manager) {
-    const connectionString = process.env.DATABASE_URL;
+    const connectionString =
+      process.env.DATABASE_URL ||
+      process.env.NEON_DATABASE_URL ||
+      process.env.VITE_DATABASE_URL;
     if (!connectionString) {
-      throw new Error("DATABASE_URL environment variable is not set");
+      throw new Error(
+        "DATABASE_URL, NEON_DATABASE_URL, or VITE_DATABASE_URL environment variable is not set"
+      );
     }
     manager = new ConnectionManager(connectionString);
     await manager.initialize();

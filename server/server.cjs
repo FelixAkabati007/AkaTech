@@ -17,6 +17,7 @@ const { OAuth2Client } = require("google-auth-library");
 const dal = require("./dal.cjs");
 const {
   sendLoginNotification,
+  sendPasswordResetEmail,
   sendInvoiceEmail,
 } = require("./emailService.cjs");
 const { PROJECT_TYPES } = require("./constants.cjs");
@@ -28,22 +29,25 @@ const app = express();
 const server = http.createServer(app);
 
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
+const GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
 const ALLOWED_ORIGINS = [
   CLIENT_URL,
   "https://aka-tech-two.vercel.app",
   "http://localhost:5173", // Vite default
+  "http://127.0.0.1:5173", // Vite via IPv4
   "http://localhost:5175", // Current dev port
   "http://localhost:3000", // Common alternative
 ];
 
-if (!process.env.GOOGLE_CLIENT_ID) {
+if (!GOOGLE_CLIENT_ID) {
   logger.warn(
     "GOOGLE_CLIENT_ID is not set in environment variables. Google Auth will fail."
   );
 } else {
   logger.info(
     "Google Auth configured",
-    { clientIdPrefix: process.env.GOOGLE_CLIENT_ID.substring(0, 10) }
+    { clientIdPrefix: GOOGLE_CLIENT_ID.substring(0, 10) }
   );
 }
 
@@ -74,13 +78,22 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-const SECRET_KEY = process.env.JWT_SECRET;
+const SECRET_KEY =
+  process.env.JWT_SECRET ||
+  process.env.AUTH_SECRET ||
+  process.env.SESSION_SECRET ||
+  process.env.GOOGLE_CLIENT_SECRET;
 if (!SECRET_KEY) {
   logger.error("FATAL: JWT_SECRET is not defined in .env", {
     severity: "CRITICAL",
     action: "Server shutdown"
   });
   process.exit(1);
+}
+if (!process.env.JWT_SECRET && process.env.GOOGLE_CLIENT_SECRET) {
+  logger.warn(
+    "JWT_SECRET is missing; using GOOGLE_CLIENT_SECRET as a temporary session-signing fallback. Set JWT_SECRET before deployment."
+  );
 }
 
 // --- Middleware ---
@@ -151,6 +164,23 @@ app.head("/api/health", async (req, res) => {
   }
 });
 
+app.get("/api/auth/config", (req, res) => {
+  res.json({
+    googleClientId: GOOGLE_CLIENT_ID || null,
+    googleAuthAvailable: Boolean(GOOGLE_CLIENT_ID),
+    emailPasswordAuthAvailable: Boolean(
+      process.env.DATABASE_URL ||
+        process.env.NEON_DATABASE_URL ||
+        process.env.VITE_DATABASE_URL
+    ),
+    passwordResetAvailable: Boolean(
+      (process.env.EMAIL_USER && process.env.EMAIL_PASS) ||
+        process.env.SMTP_HOST ||
+        process.env.RESEND_API_KEY
+    ),
+  });
+});
+
 // Rate Limiter
 const limiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
@@ -164,6 +194,38 @@ const encrypt = (text) => {
   // In a real app, use crypto with a proper key/iv.
   // For this demo, we'll base64 encode to simulate "storage format"
   return Buffer.from(text).toString("base64");
+};
+
+const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const isStrongPassword = (password) =>
+  typeof password === "string" &&
+  password.length >= 8 &&
+  /[A-Z]/.test(password) &&
+  /[a-z]/.test(password) &&
+  /\d/.test(password);
+
+const hashResetToken = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
+const setAuthCookie = (res, token) => {
+  res.cookie("auth_token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    path: "/",
+    maxAge: 24 * 60 * 60 * 1000,
+  });
+};
+
+const createSessionToken = (user) =>
+  jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET_KEY, {
+    expiresIn: "24h",
+  });
+
+const toSafeUser = (user) => {
+  const { passwordHash, ...safeUser } = user;
+  return { ...safeUser, hasPassword: !!passwordHash };
 };
 
 const decrypt = (text) => {
@@ -404,13 +466,19 @@ app.post("/api/webhooks/payment", async (req, res) => {
 
 // --- Routes ---
 
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 // Google Auth (Unified for Signup and Login)
 
 app.post("/api/signup/verify-google", async (req, res) => {
-  const { token } = req.body;
+  const { token, mode } = req.body;
   if (!token) return res.status(400).json({ error: "Token required" });
+  if (!GOOGLE_CLIENT_ID) {
+    return res.status(503).json({
+      error: "Google authentication is not configured",
+      fallback: "email_password",
+    });
+  }
 
   try {
     let googleUser = {};
@@ -420,7 +488,7 @@ app.post("/api/signup/verify-google", async (req, res) => {
       // ID Token
       const ticket = await googleClient.verifyIdToken({
         idToken: token,
-        audience: process.env.GOOGLE_CLIENT_ID,
+        audience: GOOGLE_CLIENT_ID,
       });
       const payload = ticket.getPayload();
       googleUser = {
@@ -454,6 +522,11 @@ app.post("/api/signup/verify-google", async (req, res) => {
       return res
         .status(400)
         .json({ error: "Email not found in Google profile" });
+    if (googleUser.email_verified === false) {
+      return res.status(401).json({ error: "Google email is not verified" });
+    }
+
+    googleUser.email = normalizeEmail(googleUser.email);
 
     // Special Admin Logic
     let role = "client";
@@ -508,26 +581,20 @@ app.post("/api/signup/verify-google", async (req, res) => {
       );
     }
 
-    const sessionToken = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+    const sessionToken = createSessionToken(user);
+    const signupToken = jwt.sign(
+      { email: user.email, verified: true, method: "google", mode },
       SECRET_KEY,
-      { expiresIn: "24h" }
+      { expiresIn: "1h" }
     );
 
-    // Set secure cookie
-    res.cookie("auth_token", sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      path: "/",
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    });
-
-    const { passwordHash, ...safeUser } = user;
+    setAuthCookie(res, sessionToken);
     res.json({
       token: sessionToken,
-      user: { ...safeUser, hasPassword: !!passwordHash },
+      user: toSafeUser(user),
       email: user.email,
+      signupToken,
+      method: "google",
     });
   } catch (error) {
     logger.error("Google authentication failed", {
@@ -536,7 +603,11 @@ app.post("/api/signup/verify-google", async (req, res) => {
     });
     res
       .status(401)
-      .json({ error: "Authentication failed", details: error.message });
+      .json({
+        error: "Google authentication failed",
+        details: error.message,
+        fallback: "email_password",
+      });
   }
 });
 
@@ -551,10 +622,13 @@ app.post("/api/auth/google", (req, res) => {
 // Change Password
 app.post("/api/auth/change-password", authenticateToken, async (req, res) => {
   const { oldPassword, newPassword } = req.body;
-  if (!newPassword || newPassword.length < 6) {
+  if (!isStrongPassword(newPassword)) {
     return res
       .status(400)
-      .json({ error: "New password must be at least 6 characters" });
+      .json({
+        error:
+          "New password must be at least 8 characters and include uppercase, lowercase, and a number",
+      });
   }
 
   try {
@@ -581,6 +655,84 @@ app.post("/api/auth/change-password", authenticateToken, async (req, res) => {
   }
 });
 
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const email = normalizeEmail(req.body.email);
+
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: "Please enter a valid email address" });
+  }
+
+  try {
+    const user = await dal.getUserByEmail(email);
+
+    if (user) {
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = hashResetToken(rawToken);
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+      await dal.createPasswordResetToken({
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      });
+
+      const resetUrl = `${CLIENT_URL.replace(/\/$/, "")}/?resetToken=${rawToken}`;
+      await sendPasswordResetEmail(user.email, resetUrl);
+      await logAudit("PASSWORD_RESET_REQUEST", user.id, { email: user.email });
+    }
+
+    // Always return the same response to avoid account enumeration.
+    res.json({
+      message:
+        "If an account exists for that email, a password reset link has been sent.",
+    });
+  } catch (error) {
+    logger.error("Password reset request failed", { message: error.message });
+    res.status(500).json({ error: "Unable to process password reset request" });
+  }
+});
+
+app.post("/api/auth/reset-password", async (req, res) => {
+  const { token, password } = req.body;
+
+  if (!token) {
+    return res.status(400).json({ error: "Reset token is required" });
+  }
+  if (!isStrongPassword(password)) {
+    return res.status(400).json({
+      error:
+        "Password must be at least 8 characters and include uppercase, lowercase, and a number",
+    });
+  }
+
+  try {
+    const tokenHash = hashResetToken(token);
+    const resetToken = await dal.getValidPasswordResetToken(tokenHash);
+
+    if (!resetToken) {
+      return res.status(400).json({ error: "Reset link is invalid or expired" });
+    }
+
+    const user = await dal.getUserById(resetToken.userId);
+    if (!user) {
+      return res.status(400).json({ error: "Reset link is invalid or expired" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    await dal.updateUser(user.id, {
+      passwordHash,
+      accountType: user.googleId ? "google+neon" : "neon",
+    });
+    await dal.markPasswordResetTokenUsed(resetToken.id);
+    await logAudit("PASSWORD_RESET_COMPLETE", user.id, { email: user.email });
+
+    res.json({ message: "Password reset successfully" });
+  } catch (error) {
+    logger.error("Password reset failed", { message: error.message });
+    res.status(500).json({ error: "Unable to reset password" });
+  }
+});
+
 // 0.1 Get Current User (Session Persistence)
 app.get("/api/auth/me", authenticateToken, async (req, res) => {
   const user = await dal.getUserById(req.user.id);
@@ -595,20 +747,28 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
 app.post("/api/auth/register", async (req, res, next) => {
   try {
     const { name, email, password, role, accountType } = req.body;
+    const normalizedEmail = normalizeEmail(email);
 
-    if (!name || !email || !password) {
+    if (!name || !normalizedEmail || !password) {
       return res
         .status(400)
         .json({ error: "Name, email, and password are required." });
     }
 
-    if (password.length < 8) {
-      return res
-        .status(400)
-        .json({ error: "Password must be at least 8 characters long." });
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ error: "Please enter a valid email address." });
     }
 
-    const existingUser = await dal.getUserByEmail(email);
+    if (!isStrongPassword(password)) {
+      return res
+        .status(400)
+        .json({
+          error:
+            "Password must be at least 8 characters and include uppercase, lowercase, and a number.",
+        });
+    }
+
+    const existingUser = await dal.getUserByEmail(normalizedEmail);
     if (existingUser) {
       return res
         .status(400)
@@ -620,29 +780,17 @@ app.post("/api/auth/register", async (req, res, next) => {
 
     const newUser = await dal.createUser({
       name: xss(name),
-      email: xss(email),
+      email: xss(normalizedEmail),
       passwordHash: hashedPassword,
       role: role || "client",
-      accountType: accountType || "Auto",
+      accountType: accountType || "neon",
     });
 
-    const token = jwt.sign(
-      { id: newUser.id, email: newUser.email, role: newUser.role },
-      SECRET_KEY,
-      { expiresIn: "24h" }
-    );
-
-    // Set secure cookie
-    res.cookie("auth_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      path: "/",
-      maxAge: 24 * 60 * 60 * 1000,
-    });
+    const token = createSessionToken(newUser);
+    setAuthCookie(res, token);
 
     // Return user without password
-    const { passwordHash: _, ...userWithoutPassword } = newUser;
+    const userWithoutPassword = toSafeUser(newUser);
 
     // Notify clients
     io.emit("user_registered", userWithoutPassword);
@@ -941,8 +1089,9 @@ app.post("/api/invoices/request", authenticateToken, async (req, res) => {
   }
 });
 
-// 1q. Signup Complete (Finalize & Generate Invoice)
-app.post("/api/signup/complete", async (req, res) => {
+// 1q. Legacy signup completion endpoint retained for old clients.
+// The active endpoint is defined later with signup token validation.
+app.post("/api/signup/complete-legacy", async (req, res) => {
   const { email, finalData } = req.body;
 
   if (!email || !finalData) {
@@ -1577,8 +1726,9 @@ app.get("/api/clients", authenticateToken, async (req, res) => {
 // 2. Login (Admin & Client)
 app.post("/api/login", async (req, res) => {
   const { username, password } = req.body; // username is email for clients
+  const normalizedEmail = normalizeEmail(username);
 
-  if (!username || !password) {
+  if (!normalizedEmail || !password) {
     return res
       .status(400)
       .json({ error: "Email/Username and password are required" });
@@ -1586,7 +1736,7 @@ app.post("/api/login", async (req, res) => {
 
   try {
     // 2. Check for real user in DB
-    const user = await dal.getUserByEmail(username);
+    const user = await dal.getUserByEmail(normalizedEmail);
 
     if (!user) {
       return res.status(401).json({ error: "Invalid credentials" });
@@ -1606,26 +1756,13 @@ app.post("/api/login", async (req, res) => {
     }
 
     // 4. Generate Token
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      SECRET_KEY,
-      { expiresIn: "24h" }
-    );
-
-    // Set secure cookie
-    res.cookie("auth_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      path: "/",
-      maxAge: 24 * 60 * 60 * 1000,
-    });
+    const token = createSessionToken(user);
+    setAuthCookie(res, token);
 
     // 5. Audit Log
     await logAudit("USER_LOGIN", user.id, { email: user.email });
 
-    const { passwordHash, ...safeUser } = user;
-    res.json({ token, user: { ...safeUser, hasPassword: !!passwordHash } });
+    res.json({ token, user: toSafeUser(user) });
   } catch (error) {
     logger.error("Login failed", { message: error.message });
     res.status(500).json({ error: "Login failed" });
@@ -2227,18 +2364,22 @@ app.patch(
 
 // --- Multi-Step Signup Endpoints ---
 
-// 10. Google Verification
-app.post("/api/signup/verify-google", async (req, res) => {
+// 10. Legacy Google verification-only endpoint. The primary Google auth route
+// above creates or logs in users and also returns a temporary signup token.
+app.post("/api/signup/verify-google-token", async (req, res) => {
   const { token } = req.body;
   logger.debug("Google verification requested");
 
   if (!token) return res.status(400).json({ error: "Token is required" });
 
   try {
-    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    if (!GOOGLE_CLIENT_ID) {
+      return res.status(503).json({ error: "Google authentication is not configured" });
+    }
+    const client = new OAuth2Client(GOOGLE_CLIENT_ID);
     const ticket = await client.verifyIdToken({
       idToken: token,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: GOOGLE_CLIENT_ID,
     });
     const payload = ticket.getPayload();
     const { email, email_verified } = payload;
@@ -2310,7 +2451,8 @@ app.get("/api/signup/progress", async (req, res) => {
 
 // 10e. Complete Signup
 app.post("/api/signup/complete", async (req, res) => {
-  const { email, finalData, signupToken } = req.body;
+  const { finalData, signupToken } = req.body;
+  const email = normalizeEmail(req.body.email);
 
   try {
     // Verify signup token if present (for passwordless/Google signup)
@@ -2338,18 +2480,15 @@ app.post("/api/signup/complete", async (req, res) => {
       }
 
       const hashedPassword = finalData.password
-        ? crypto.createHash("sha256").update(finalData.password).digest("hex")
-        : crypto
-            .createHash("sha256")
-            .update(crypto.randomBytes(32).toString("hex"))
-            .digest("hex"); // Random password for verified users
+        ? await bcrypt.hash(finalData.password, 10)
+        : null;
 
       user = await dal.createUser({
         name: xss(finalData.name || "Client"),
         email: xss(email),
         passwordHash: hashedPassword,
         role: "client",
-        accountType: "Transparent Package", // Default or from finalData
+        accountType: isVerified ? "google" : "neon",
         company: xss(finalData.companyName || ""),
       });
       isNewUser = true;
@@ -2459,11 +2598,8 @@ app.post("/api/signup/complete", async (req, res) => {
     });
 
     // 5. Generate Token
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      SECRET_KEY,
-      { expiresIn: "24h" }
-    );
+    const token = createSessionToken(user);
+    setAuthCookie(res, token);
 
     // Emit socket event for real-time dashboard updates
     io.emit("new_user", {
@@ -2475,7 +2611,7 @@ app.post("/api/signup/complete", async (req, res) => {
     res.status(201).json({
       message: "Signup completed successfully",
       token,
-      user: { ...user, password: undefined },
+      user: toSafeUser(user),
     });
   } catch (error) {
     logger.error("Signup completion failed", { message: error.message });

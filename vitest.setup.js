@@ -14,5 +14,6 @@ vi.mock("@react-oauth/google", () => {
       React.createElement("span", { "data-testid": "google-login" }),
     GoogleOAuthProvider: ({ children }) =>
       React.createElement(React.Fragment, null, children),
+    useGoogleLogin: () => () => {},
   };
 });

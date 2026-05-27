@@ -14,8 +14,22 @@ const StepSignup = ({ onVerify, loading }) => {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [authMode, setAuthMode] = useState("login"); // 'login' or 'signup'
   const online = useOnlineStatus();
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-  const canUseGoogle = online && Boolean(googleClientId);
+  const [googleConfigured, setGoogleConfigured] = useState(
+    Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID)
+  );
+  const canUseGoogle = online && googleConfigured;
+
+  useEffect(() => {
+    if (googleConfigured) return;
+    fetch("/api/auth/config")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((config) => {
+        if (config?.googleAuthAvailable) {
+          setGoogleConfigured(true);
+        }
+      })
+      .catch(() => {});
+  }, [googleConfigured]);
 
   return (
     <div className="max-w-md mx-auto space-y-6">
@@ -59,7 +73,7 @@ const StepSignup = ({ onVerify, loading }) => {
             You appear to be offline. Google Sign-In is unavailable.
           </div>
         )}
-        {online && !googleClientId && (
+        {online && !googleConfigured && (
           <div className="p-3 bg-yellow-50 text-yellow-700 text-sm rounded-lg flex items-center gap-2">
             <Icons.AlertTriangle size={16} />
             Google Sign-In is not configured for this local preview.

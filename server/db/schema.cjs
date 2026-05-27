@@ -205,6 +205,24 @@ const systemSettings = pgTable("system_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id).notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => {
+    return {
+      userIdIdx: index("password_reset_tokens_user_id_idx").on(table.userId),
+      tokenHashIdx: index("password_reset_tokens_hash_idx").on(table.tokenHash),
+    };
+  }
+);
+
 module.exports = {
   users,
   projects,
@@ -216,4 +234,5 @@ module.exports = {
   subscriptions,
   invoices,
   systemSettings,
+  passwordResetTokens,
 };

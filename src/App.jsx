@@ -2,7 +2,7 @@ import React, { useState, useEffect, Suspense, lazy } from "react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastProvider } from "@components/ui/ToastProvider";
 import { SyncStatusProvider } from "@components/ui/SyncStatusProvider";
-import { Toaster } from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 import { ScrollProgress } from "@components/ui/ScrollProgress";
 import { ShowcaseNav } from "@components/ui/ShowcaseNav";
 import { Navbar } from "@components/layout/Navbar";
@@ -109,8 +109,14 @@ const PlanCompletion = lazy(() =>
 export default function App() {
   const [view, setView] = useState("landing"); // landing | dashboard | portfolio | plan-completion | careers | privacy | cookie | terms
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState("login");
+  const [resetToken, setResetToken] = useState(null);
   const [user, setUser] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
+  const [googleClientId, setGoogleClientId] = useState(
+    import.meta.env.VITE_GOOGLE_CLIENT_ID || ""
+  );
+  const [googleAuthFailed, setGoogleAuthFailed] = useState(false);
   const { mode, cycleTheme } = useTheme();
 
   useEffect(() => {
@@ -127,6 +133,31 @@ export default function App() {
         setUser(null);
       });
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("resetToken");
+    if (token) {
+      setResetToken(token);
+      setAuthModalMode("reset");
+      setAuthModalOpen(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (googleClientId) return;
+
+    fetch("/api/auth/config")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((config) => {
+        if (config?.googleClientId) {
+          setGoogleClientId(config.googleClientId);
+        }
+      })
+      .catch(() => {
+        setGoogleAuthFailed(true);
+      });
+  }, [googleClientId]);
 
   const handleLogin = (email, password) => {
     return fetch("/api/login", {
@@ -148,6 +179,32 @@ export default function App() {
         setAuthModalOpen(false);
         // Correctly route to dashboard for both admin and client
         // The Dashboard component handles the inner routing based on role
+        setView("dashboard");
+      });
+  };
+
+  const handleSignup = ({ name, email, password }) => {
+    return fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+        accountType: "neon",
+      }),
+      credentials: "include",
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || data.message || "Signup failed");
+        }
+        return data;
+      })
+      .then((data) => {
+        setUser(data.user);
+        setAuthModalOpen(false);
         setView("dashboard");
       });
   };
@@ -178,12 +235,13 @@ export default function App() {
   };
 
   const handleGoogleLogin = (tokenResponse) => {
-    fetch("/api/signup/verify-google", {
+    const token = tokenResponse.access_token || tokenResponse.credential;
+    return fetch("/api/signup/verify-google", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ token: tokenResponse.access_token }),
+      body: JSON.stringify({ token, mode: "login" }),
       credentials: "include",
     })
       .then(async (res) => {
@@ -198,19 +256,58 @@ export default function App() {
         setUser(data.user);
         setAuthModalOpen(false);
         setView("dashboard");
+        toast.success("Signed in with Google");
       })
       .catch((err) => {
         console.error("Google Login Error:", err);
+        setGoogleAuthFailed(true);
+        toast.error("Google auth failed. Continue with email and password.");
+        throw err;
       });
   };
 
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-  const isGoogleAuthAvailable = Boolean(googleClientId);
+  const handleRequestPasswordReset = (email) => {
+    return fetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Unable to request password reset");
+      }
+      return data;
+    });
+  };
+
+  const handleResetPassword = ({ token, password }) => {
+    return fetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || "Unable to reset password");
+        }
+        return data;
+      })
+      .then((data) => {
+        setResetToken(null);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("resetToken");
+        window.history.replaceState({}, "", url.toString());
+        return data;
+      });
+  };
+
+  const isGoogleAuthAvailable = Boolean(googleClientId) && !googleAuthFailed;
 
   useEffect(() => {
     if (!isGoogleAuthAvailable) {
       console.warn(
-        "VITE_GOOGLE_CLIENT_ID is missing. Google auth is disabled in this local preview."
+        "Google OAuth client ID is missing. Email/password auth remains available."
       );
     } else {
       // Debug log to ensure Client ID is loaded (masked for security)
@@ -242,7 +339,7 @@ export default function App() {
                       ? setView("landing")
                       : user
                       ? setView("dashboard")
-                      : setAuthModalOpen(true)
+                      : (setAuthModalMode("login"), setAuthModalOpen(true))
                   }
                   isLoggedIn={!!user}
                   user={user}
@@ -317,9 +414,23 @@ export default function App() {
               <CookieConsent />
               <AuthModal
                 isOpen={authModalOpen}
-                onClose={() => setAuthModalOpen(false)}
+                onClose={() => {
+                  setAuthModalOpen(false);
+                  if (resetToken) {
+                    setResetToken(null);
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("resetToken");
+                    window.history.replaceState({}, "", url.toString());
+                  }
+                }}
                 onLogin={handleLogin}
+                onSignup={handleSignup}
                 onGoogleLogin={handleGoogleLogin}
+                onGoogleUnavailable={() => setGoogleAuthFailed(true)}
+                onRequestPasswordReset={handleRequestPasswordReset}
+                onResetPassword={handleResetPassword}
+                resetToken={resetToken}
+                initialMode={authModalMode}
                 isGoogleAuthAvailable={isGoogleAuthAvailable}
               />
               <Toaster position="top-center" />
