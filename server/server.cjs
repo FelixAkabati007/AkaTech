@@ -45,10 +45,7 @@ if (!GOOGLE_CLIENT_ID) {
     "GOOGLE_CLIENT_ID is not set in environment variables. Google Auth will fail."
   );
 } else {
-  logger.info(
-    "Google Auth configured",
-    { clientIdPrefix: GOOGLE_CLIENT_ID.substring(0, 10) }
-  );
+  logger.info("Google Auth configured");
 }
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;

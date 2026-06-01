@@ -304,20 +304,6 @@ export default function App() {
 
   const isGoogleAuthAvailable = Boolean(googleClientId) && !googleAuthFailed;
 
-  useEffect(() => {
-    if (!isGoogleAuthAvailable) {
-      console.warn(
-        "Google OAuth client ID is missing. Email/password auth remains available."
-      );
-    } else {
-      // Debug log to ensure Client ID is loaded (masked for security)
-      console.log(
-        "Google Client ID loaded:",
-        googleClientId.substring(0, 10) + "..."
-      );
-    }
-  }, [googleClientId, isGoogleAuthAvailable]);
-
   const appContent = (
     <div className={`min-h-screen ${mode} transition-colors duration-300`}>
       <Analytics />

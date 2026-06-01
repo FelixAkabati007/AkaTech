@@ -6,12 +6,53 @@ import { useOnlineStatus } from "@hooks/useOnlineStatus";
 // Lazy load Spline to avoid heavy initial load
 const Spline = React.lazy(() => import("@splinetool/react-spline"));
 
+const SPLINE_SHADER_WARNING_FILTER = "__akatechSplineShaderWarningFilter";
+
+export const isSplineShaderUnrollWarning = (args) => {
+  const message = args.map((arg) => String(arg)).join(" ");
+  return (
+    message.includes("THREE.WebGLProgram: Program Info Log") &&
+    message.includes("warning X3557: loop only executes for 1 iteration")
+  );
+};
+
+const installSplineShaderWarningFilter = () => {
+  if (typeof window === "undefined") return () => {};
+
+  const releaseFilter = (filterState) => {
+    filterState.refs -= 1;
+    if (filterState.refs <= 0) {
+      console.warn = filterState.originalWarn;
+      delete window[SPLINE_SHADER_WARNING_FILTER];
+    }
+  };
+
+  const existingFilter = window[SPLINE_SHADER_WARNING_FILTER];
+  if (existingFilter) {
+    existingFilter.refs += 1;
+    return () => releaseFilter(existingFilter);
+  }
+
+  const originalWarn = console.warn;
+  const filterState = { originalWarn, refs: 1 };
+  window[SPLINE_SHADER_WARNING_FILTER] = filterState;
+
+  console.warn = (...args) => {
+    if (isSplineShaderUnrollWarning(args)) return;
+    originalWarn.apply(console, args);
+  };
+
+  return () => releaseFilter(filterState);
+};
+
 export const FloatingAssistant = () => {
   const [isHovered, setIsHovered] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const online = useOnlineStatus();
+
+  React.useEffect(() => installSplineShaderWarningFilter(), []);
 
   React.useEffect(() => {
     const checkMobile = () => {
