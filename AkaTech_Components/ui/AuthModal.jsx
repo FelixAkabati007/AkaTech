@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useGoogleLogin } from "@react-oauth/google";
 import { Icons } from "@components/ui/Icons";
 import { Logo } from "@components/ui/Logo";
 import { useToast } from "@components/ui/ToastProvider";
@@ -10,23 +9,20 @@ const passwordHint =
 
 const GoogleAuthButton = ({ mode, onGoogleLogin, onGoogleUnavailable }) => {
   const { addToast } = useToast();
-  const googleLogin = useGoogleLogin({
-    flow: "implicit",
-    onSuccess: (tokenResponse) => {
-      if (onGoogleLogin) {
-        onGoogleLogin(tokenResponse);
-      }
-    },
-    onError: () => {
+
+  const startGoogleAuth = () => {
+    try {
+      onGoogleLogin?.({ mode });
+    } catch (error) {
       addToast("Google Sign-In failed. Use email instead.", "error");
       onGoogleUnavailable?.();
-    },
-  });
+    }
+  };
 
   return (
     <button
       type="button"
-      onClick={() => googleLogin()}
+      onClick={startGoogleAuth}
       className="w-full bg-gray-50 dark:bg-white text-black py-3 mb-6 flex items-center justify-center gap-3 hover:bg-gray-100 dark:hover:bg-gray-200 transition border border-gray-200 dark:border-transparent"
     >
       <Icons.Google className="w-5 h-5" />

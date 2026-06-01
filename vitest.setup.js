@@ -7,13 +7,3 @@ vi.mock("@components/ui/SyncStatusProvider", () => {
     useSyncStatus: () => ({ socket: null, status: "offline" }),
   };
 });
-vi.mock("@react-oauth/google", () => {
-  const React = globalThis.React;
-  return {
-    GoogleLogin: (props) =>
-      React.createElement("span", { "data-testid": "google-login" }),
-    GoogleOAuthProvider: ({ children }) =>
-      React.createElement(React.Fragment, null, children),
-    useGoogleLogin: () => () => {},
-  };
-});

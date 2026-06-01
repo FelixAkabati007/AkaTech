@@ -65,6 +65,15 @@ describe("AuthModal", () => {
     });
   });
 
+  it("starts backend Google OAuth with the active auth mode", () => {
+    const onGoogleLogin = vi.fn();
+    render(<AuthModal {...baseProps} onGoogleLogin={onGoogleLogin} />);
+
+    fireEvent.click(screen.getByText("Sign in with Google"));
+
+    expect(onGoogleLogin).toHaveBeenCalledWith({ mode: "login" });
+  });
+
   it("submits password reset token and new password", async () => {
     const onResetPassword = vi.fn(() => Promise.resolve());
     render(

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { GoogleLogin } from "@react-oauth/google";
 import { Icons } from "@components/ui/Icons";
 import { useSyncStatus } from "@components/ui/SyncStatusProvider";
 import { PROJECT_TYPES } from "../../lib/constants";
@@ -9,14 +8,12 @@ import { useOnlineStatus } from "../../hooks/useOnlineStatus";
 
 const API_URL = "/api";
 
-const StepSignup = ({ onVerify, loading }) => {
+const StepSignup = ({ loading }) => {
   const [error, setError] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [authMode, setAuthMode] = useState("login"); // 'login' or 'signup'
   const online = useOnlineStatus();
-  const [googleConfigured, setGoogleConfigured] = useState(
-    Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID)
-  );
+  const [googleConfigured, setGoogleConfigured] = useState(false);
   const canUseGoogle = online && googleConfigured;
 
   useEffect(() => {
@@ -30,6 +27,12 @@ const StepSignup = ({ onVerify, loading }) => {
       })
       .catch(() => {});
   }, [googleConfigured]);
+
+  const startGoogleAuth = () => {
+    setError("");
+    const params = new URLSearchParams({ mode: authMode });
+    window.location.assign(`/api/auth/google/start?${params.toString()}`);
+  };
 
   return (
     <div className="max-w-md mx-auto space-y-6">
@@ -127,50 +130,14 @@ const StepSignup = ({ onVerify, loading }) => {
             </div>
           )}
           {canUseGoogle ? (
-            <GoogleLogin
-              ux_mode="popup"
-              locale="en"
-              onSuccess={(credentialResponse) => {
-                console.log("Google Login Success:", credentialResponse);
-                setError(""); // Clear previous errors
-                onVerify("google", {
-                  token: credentialResponse.credential,
-                  mode: authMode,
-                }).catch((err) => {
-                  console.error("Google verify error:", err);
-                  if (
-                    err.message &&
-                    err.message.toLowerCase().includes("already exists")
-                  ) {
-                    setError(
-                      <span>
-                        Account already exists.{" "}
-                        <button
-                          onClick={() => setAuthMode("login")}
-                          className="underline font-bold hover:text-red-800"
-                        >
-                          Switch to Login
-                        </button>
-                      </span>
-                    );
-                  } else {
-                    setError(
-                      err.message ||
-                        "Google verification failed. Please try again."
-                    );
-                  }
-                });
-              }}
-              onError={() => {
-                console.error("Google Login Failed (onError triggered)");
-                setError("Google Login Failed. Please try again.");
-              }}
-              theme="filled_blue"
-              shape="pill"
-              text={authMode === "signup" ? "signup_with" : "signin_with"}
-              logo_alignment="left"
-              width="250"
-            />
+            <button
+              type="button"
+              data-testid="google-login"
+              onClick={startGoogleAuth}
+              className="min-h-[48px] rounded-full bg-blue-600 px-6 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+            >
+              {authMode === "signup" ? "Sign up with Google" : "Sign in with Google"}
+            </button>
           ) : (
             <button
               type="button"

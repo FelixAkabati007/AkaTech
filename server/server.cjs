@@ -27,10 +27,11 @@ const logger = require("./logging/logger.cjs");
 
 const app = express();
 const server = http.createServer(app);
+app.set("trust proxy", 1);
 
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
-const GOOGLE_CLIENT_ID =
-  process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const ALLOWED_ORIGINS = [
   CLIENT_URL,
   "https://aka-tech-two.vercel.app",
@@ -49,6 +50,9 @@ if (!GOOGLE_CLIENT_ID) {
 }
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+const NORMALIZED_ADMIN_EMAIL = String(ADMIN_EMAIL || "")
+  .trim()
+  .toLowerCase();
 
 const io = new Server(server, {
   cors: {
@@ -59,9 +63,10 @@ const io = new Server(server, {
 });
 
 // Heartbeat Mechanism
-setInterval(() => {
+const heartbeatInterval = setInterval(() => {
   io.emit("heartbeat", { timestamp: Date.now() });
 }, 5000); // Send heartbeat every 5 seconds
+heartbeatInterval.unref?.();
 
 io.on("connection", (socket) => {
   logger.debug("WebSocket client connected", { socketId: socket.id });
@@ -163,8 +168,7 @@ app.head("/api/health", async (req, res) => {
 
 app.get("/api/auth/config", (req, res) => {
   res.json({
-    googleClientId: GOOGLE_CLIENT_ID || null,
-    googleAuthAvailable: Boolean(GOOGLE_CLIENT_ID),
+    googleAuthAvailable: Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
     emailPasswordAuthAvailable: Boolean(
       process.env.DATABASE_URL ||
         process.env.NEON_DATABASE_URL ||
@@ -201,6 +205,44 @@ const isStrongPassword = (password) =>
   /[A-Z]/.test(password) &&
   /[a-z]/.test(password) &&
   /\d/.test(password);
+
+const getRoleForEmail = (email) =>
+  normalizeEmail(email) === NORMALIZED_ADMIN_EMAIL ? "admin" : "client";
+
+const getRedirectRouteForUser = (user) =>
+  user?.role === "admin" ? "admin" : "client";
+
+const getRedirectViewForUser = () => "dashboard";
+
+const maskEmailForLog = (email) => {
+  const normalized = normalizeEmail(email);
+  const [local, domain] = normalized.split("@");
+  if (!local || !domain) return "unknown";
+  return `${local.slice(0, 2)}***@${domain}`;
+};
+
+const getAuthEventPayload = (user, source) => ({
+  source,
+  email: maskEmailForLog(user?.email),
+  role: user?.role || "unknown",
+  redirectRoute: getRedirectRouteForUser(user),
+  redirectView: getRedirectViewForUser(user),
+});
+
+const getSafeClientOrigin = (origin) =>
+  origin && ALLOWED_ORIGINS.includes(origin) ? origin : CLIENT_URL;
+
+const getAllowedClientOrigin = (req) => getSafeClientOrigin(req.get("origin"));
+
+const buildClientRedirectUrl = (req, params = {}, origin) => {
+  const url = new URL("/", getSafeClientOrigin(origin || req.get("origin")));
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      url.searchParams.set(key, value);
+    }
+  });
+  return url.toString();
+};
 
 const hashResetToken = (token) =>
   crypto.createHash("sha256").update(token).digest("hex");
@@ -463,10 +505,221 @@ app.post("/api/webhooks/payment", async (req, res) => {
 
 // --- Routes ---
 
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
+
+const getGoogleCallbackUrl = (req) =>
+  process.env.GOOGLE_CALLBACK_URL ||
+  `${req.protocol}://${req.get("host")}/api/auth/google/callback`;
+
+const getGoogleProfileFromToken = async (token) => {
+  if (String(token || "").startsWith("ey")) {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    return {
+      sub: payload.sub,
+      email: payload.email,
+      name: payload.name,
+      picture: payload.picture,
+      email_verified: payload.email_verified,
+    };
+  }
+
+  const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!userInfoRes.ok) {
+    throw new Error("Failed to fetch user info with access token");
+  }
+  const payload = await userInfoRes.json();
+  return {
+    sub: payload.sub,
+    email: payload.email,
+    name: payload.name,
+    picture: payload.picture,
+    email_verified: payload.email_verified,
+  };
+};
+
+const completeGoogleAuthentication = async (googleUser, req, mode, source) => {
+  const email = normalizeEmail(googleUser.email);
+  if (!email) {
+    const error = new Error("Email not found in Google profile");
+    error.statusCode = 400;
+    error.code = "GOOGLE_PROFILE_EMAIL_MISSING";
+    throw error;
+  }
+
+  if (googleUser.email_verified === false) {
+    const error = new Error("Google email is not verified");
+    error.statusCode = 401;
+    error.code = "GOOGLE_EMAIL_NOT_VERIFIED";
+    throw error;
+  }
+
+  const role = getRoleForEmail(email);
+  let user = await dal.getUserByEmail(email);
+
+  if (!user) {
+    user = await dal.createUser({
+      googleId: googleUser.sub,
+      email,
+      name: googleUser.name || email.split("@")[0],
+      avatarUrl: googleUser.picture,
+      role,
+      accountType: "google",
+      passwordHash: null,
+    });
+
+    if (!user) {
+      throw new Error("Failed to create user. Database might be unavailable.");
+    }
+
+    await logAudit("USER_REGISTER_GOOGLE", user.id, { email: user.email });
+  } else {
+    const updates = {};
+    if (!user.googleId && googleUser.sub) {
+      updates.googleId = googleUser.sub;
+      user.googleId = googleUser.sub;
+    }
+    if (googleUser.picture && googleUser.picture !== user.avatarUrl) {
+      updates.avatarUrl = googleUser.picture;
+      user.avatarUrl = googleUser.picture;
+    }
+    if (googleUser.name && googleUser.name !== user.name) {
+      updates.name = googleUser.name;
+      user.name = googleUser.name;
+    }
+    if (user.role !== role) {
+      updates.role = role;
+      user.role = role;
+    }
+    if (user.accountType !== "google" && user.accountType !== "google+neon") {
+      updates.accountType = user.passwordHash ? "google+neon" : "google";
+      user.accountType = updates.accountType;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await dal.updateUser(user.id, updates);
+    }
+    await logAudit("USER_LOGIN_GOOGLE", user.id, { email: user.email });
+  }
+
+  if (user.role === "admin") {
+    sendLoginNotification(user.email, req.ip, req.get("User-Agent")).catch((err) =>
+      logger.error("Login notification failed", { message: err?.message })
+    );
+  }
+
+  const sessionToken = createSessionToken(user);
+  const signupToken = jwt.sign(
+    { email: user.email, verified: true, method: "google", mode },
+    SECRET_KEY,
+    { expiresIn: "1h" }
+  );
+
+  logger.info("Google authentication route resolved", getAuthEventPayload(user, source));
+
+  return {
+    sessionToken,
+    signupToken,
+    user,
+    redirectView: getRedirectViewForUser(user),
+    redirectRoute: getRedirectRouteForUser(user),
+  };
+};
+
+app.get("/api/auth/google/start", (req, res) => {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    return res.redirect(
+      buildClientRedirectUrl(req, {
+        auth: "google-error",
+        reason: "google_not_configured",
+      })
+    );
+  }
+
+  const mode = req.query.mode === "signup" ? "signup" : "login";
+  const state = jwt.sign(
+    {
+      mode,
+      origin: getAllowedClientOrigin(req),
+    },
+    SECRET_KEY,
+    { expiresIn: "10m" }
+  );
+
+  const authUrl = googleClient.generateAuthUrl({
+    access_type: "offline",
+    prompt: "select_account",
+    redirect_uri: getGoogleCallbackUrl(req),
+    scope: ["openid", "email", "profile"],
+    state,
+  });
+
+  res.redirect(authUrl);
+});
+
+app.get("/api/auth/google/callback", async (req, res) => {
+  const { code, error, state } = req.query;
+  let statePayload = {};
+
+  try {
+    if (error) {
+      throw new Error(`Google returned OAuth error: ${error}`);
+    }
+    if (!code || !state) {
+      throw new Error("Missing Google authorization callback data");
+    }
+
+    statePayload = jwt.verify(state, SECRET_KEY);
+    const { tokens } = await googleClient.getToken({
+      code,
+      redirect_uri: getGoogleCallbackUrl(req),
+    });
+    const googleUser = tokens.id_token
+      ? await getGoogleProfileFromToken(tokens.id_token)
+      : await getGoogleProfileFromToken(tokens.access_token);
+    const result = await completeGoogleAuthentication(
+      googleUser,
+      req,
+      statePayload.mode || "login",
+      "google_oauth_redirect"
+    );
+
+    setAuthCookie(res, result.sessionToken);
+    return res.redirect(
+      buildClientRedirectUrl(
+        req,
+        {
+          auth: "google-success",
+          redirectView: result.redirectView,
+          redirectRoute: result.redirectRoute,
+        },
+        statePayload.origin
+      )
+    );
+  } catch (callbackError) {
+    logger.error("Google OAuth callback failed", {
+      message: callbackError.message,
+      code: callbackError.code,
+    });
+    return res.redirect(
+      buildClientRedirectUrl(
+        req,
+        {
+          auth: "google-error",
+          reason: callbackError.code || "google_callback_failed",
+        },
+        statePayload.origin
+      )
+    );
+  }
+});
 
 // Google Auth (Unified for Signup and Login)
-
 app.post("/api/signup/verify-google", async (req, res) => {
   const { token, mode } = req.body;
   if (!token) return res.status(400).json({ error: "Token required" });
@@ -478,133 +731,36 @@ app.post("/api/signup/verify-google", async (req, res) => {
   }
 
   try {
-    let googleUser = {};
-
-    // Check if it's a JWT (ID Token) or Access Token
-    if (token.startsWith("ey")) {
-      // ID Token
-      const ticket = await googleClient.verifyIdToken({
-        idToken: token,
-        audience: GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
-      googleUser = {
-        sub: payload.sub,
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture,
-        email_verified: payload.email_verified,
-      };
-    } else {
-      // Access Token
-      const userInfoRes = await fetch(
-        "https://www.googleapis.com/oauth2/v3/userinfo",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      if (!userInfoRes.ok)
-        throw new Error("Failed to fetch user info with access token");
-      const payload = await userInfoRes.json();
-      googleUser = {
-        sub: payload.sub,
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture,
-        email_verified: payload.email_verified, // UserInfo might not have this, but usually implied if we got it?
-      };
-    }
-
-    if (!googleUser.email)
-      return res
-        .status(400)
-        .json({ error: "Email not found in Google profile" });
-    if (googleUser.email_verified === false) {
-      return res.status(401).json({ error: "Google email is not verified" });
-    }
-
-    googleUser.email = normalizeEmail(googleUser.email);
-
-    // Special Admin Logic
-    let role = "client";
-    if (ADMIN_EMAIL && googleUser.email === ADMIN_EMAIL) {
-      role = "admin";
-    }
-
-    let user = await dal.getUserByEmail(googleUser.email);
-
-    if (!user) {
-      // Create new user (no password set initially for Google users)
-      user = await dal.createUser({
-        googleId: googleUser.sub,
-        email: googleUser.email,
-        name: googleUser.name,
-        avatarUrl: googleUser.picture,
-        role: role,
-        accountType: "google",
-        passwordHash: null, // No password initially
-      });
-
-      if (!user) {
-        throw new Error(
-          "Failed to create user. Database might be unavailable."
-        );
-      }
-
-      await logAudit("USER_REGISTER_GOOGLE", user.id, { email: user.email });
-    } else {
-      // Existing user
-      const updates = {};
-      if (!user.googleId) {
-        updates.googleId = googleUser.sub;
-      }
-      // Enforce admin role for specific email if not already set
-      if (role === "admin" && user.role !== "admin") {
-        updates.role = "admin";
-        user.role = "admin"; // Update local object for token
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await dal.updateUser(user.id, updates);
-      }
-      await logAudit("USER_LOGIN_GOOGLE", user.id, { email: user.email });
-    }
-
-    // Send security notification for admin login
-    if (user.role === "admin") {
-      // Intentionally not awaiting to avoid blocking response
-      sendLoginNotification(user.email, req.ip, req.get("User-Agent")).catch((err) =>
-        logger.error("Login notification failed", { message: err?.message })
-      );
-    }
-
-    const sessionToken = createSessionToken(user);
-    const signupToken = jwt.sign(
-      { email: user.email, verified: true, method: "google", mode },
-      SECRET_KEY,
-      { expiresIn: "1h" }
+    const googleUser = await getGoogleProfileFromToken(token);
+    const result = await completeGoogleAuthentication(
+      googleUser,
+      req,
+      mode,
+      "google_token_exchange"
     );
 
-    setAuthCookie(res, sessionToken);
+    setAuthCookie(res, result.sessionToken);
     res.json({
-      token: sessionToken,
-      user: toSafeUser(user),
-      email: user.email,
-      signupToken,
+      token: result.sessionToken,
+      user: toSafeUser(result.user),
+      email: result.user.email,
+      signupToken: result.signupToken,
       method: "google",
+      redirectView: result.redirectView,
+      redirectRoute: result.redirectRoute,
     });
   } catch (error) {
     logger.error("Google authentication failed", {
       message: error.message,
-      code: error.code
+      code: error.code,
     });
-    res
-      .status(401)
-      .json({
-        error: "Google authentication failed",
-        details: error.message,
-        fallback: "email_password",
-      });
+    res.status(error.statusCode || 401).json({
+      error: "Google authentication failed",
+      details: error.message,
+      redirectView: "landing",
+      redirectRoute: "landing",
+      fallback: "email_password",
+    });
   }
 });
 
@@ -737,13 +893,17 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
     return res.status(404).json({ message: "User not found" });
   }
   const { passwordHash, ...safeUser } = user;
-  res.json({ user: { ...safeUser, hasPassword: !!passwordHash } });
+  res.json({
+    user: { ...safeUser, hasPassword: !!passwordHash },
+    redirectView: getRedirectViewForUser(user),
+    redirectRoute: getRedirectRouteForUser(user),
+  });
 });
 
 // 0.2 Register User (Email/Password)
 app.post("/api/auth/register", async (req, res, next) => {
   try {
-    const { name, email, password, role, accountType } = req.body;
+    const { name, email, password, accountType } = req.body;
     const normalizedEmail = normalizeEmail(email);
 
     if (!name || !normalizedEmail || !password) {
@@ -779,7 +939,7 @@ app.post("/api/auth/register", async (req, res, next) => {
       name: xss(name),
       email: xss(normalizedEmail),
       passwordHash: hashedPassword,
-      role: role || "client",
+      role: getRoleForEmail(normalizedEmail),
       accountType: accountType || "neon",
     });
 
@@ -792,7 +952,17 @@ app.post("/api/auth/register", async (req, res, next) => {
     // Notify clients
     io.emit("user_registered", userWithoutPassword);
 
-    res.status(201).json({ token, user: userWithoutPassword });
+    logger.info(
+      "Email/password registration route resolved",
+      getAuthEventPayload(newUser, "email_password_register")
+    );
+
+    res.status(201).json({
+      token,
+      user: userWithoutPassword,
+      redirectView: getRedirectViewForUser(newUser),
+      redirectRoute: getRedirectRouteForUser(newUser),
+    });
   } catch (error) {
     next(error);
   }
@@ -1733,7 +1903,7 @@ app.post("/api/login", async (req, res) => {
 
   try {
     // 2. Check for real user in DB
-    const user = await dal.getUserByEmail(normalizedEmail);
+    let user = await dal.getUserByEmail(normalizedEmail);
 
     if (!user) {
       return res.status(401).json({ error: "Invalid credentials" });
@@ -1752,6 +1922,11 @@ app.post("/api/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
+    const expectedRole = getRoleForEmail(user.email);
+    if (user.role !== expectedRole) {
+      user = await dal.updateUser(user.id, { role: expectedRole });
+    }
+
     // 4. Generate Token
     const token = createSessionToken(user);
     setAuthCookie(res, token);
@@ -1759,7 +1934,17 @@ app.post("/api/login", async (req, res) => {
     // 5. Audit Log
     await logAudit("USER_LOGIN", user.id, { email: user.email });
 
-    res.json({ token, user: toSafeUser(user) });
+    logger.info(
+      "Email/password login route resolved",
+      getAuthEventPayload(user, "email_password_login")
+    );
+
+    res.json({
+      token,
+      user: toSafeUser(user),
+      redirectView: getRedirectViewForUser(user),
+      redirectRoute: getRedirectRouteForUser(user),
+    });
   } catch (error) {
     logger.error("Login failed", { message: error.message });
     res.status(500).json({ error: "Login failed" });

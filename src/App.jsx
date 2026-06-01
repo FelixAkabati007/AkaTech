@@ -1,5 +1,4 @@
 import React, { useState, useEffect, Suspense, lazy } from "react";
-import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastProvider } from "@components/ui/ToastProvider";
 import { SyncStatusProvider } from "@components/ui/SyncStatusProvider";
 import toast, { Toaster } from "react-hot-toast";
@@ -113,14 +112,61 @@ export default function App() {
   const [resetToken, setResetToken] = useState(null);
   const [user, setUser] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const [googleClientId, setGoogleClientId] = useState(
-    import.meta.env.VITE_GOOGLE_CLIENT_ID || ""
-  );
-  const [googleAuthFailed, setGoogleAuthFailed] = useState(false);
+  const [isGoogleAuthAvailable, setIsGoogleAuthAvailable] = useState(true);
   const { mode, cycleTheme } = useTheme();
 
+  const clearAuthQueryParams = () => {
+    const url = new URL(window.location.href);
+    ["auth", "reason", "redirectView", "redirectRoute"].forEach((param) =>
+      url.searchParams.delete(param)
+    );
+    window.history.replaceState({}, "", url.toString());
+  };
+
+  const routeAuthenticatedUser = (authPayload, source = "auth") => {
+    const nextUser = authPayload?.user;
+    if (!nextUser?.email) {
+      setUser(null);
+      setAuthModalOpen(false);
+      setView("landing");
+      toast.error("Authentication completed, but no user email was returned.");
+      return;
+    }
+
+    const redirectView =
+      authPayload.redirectView === "dashboard" ? "dashboard" : "landing";
+
+    setUser(nextUser);
+    setAuthModalOpen(false);
+    setView(redirectView);
+    window.scrollTo(0, 0);
+
+    if (import.meta.env.DEV) {
+      const maskedEmail = nextUser.email.replace(/^(.{2}).*(@.*)$/, "$1***$2");
+      console.info("Auth route resolved", {
+        source,
+        email: maskedEmail,
+        role: nextUser.role || "client",
+        redirectView,
+        redirectRoute:
+          authPayload.redirectRoute ||
+          (nextUser.role === "admin" ? "admin" : "client"),
+      });
+    }
+  };
+
   useEffect(() => {
-    // Attempt to fetch user using cookie
+    const params = new URLSearchParams(window.location.search);
+    const googleAuthResult = params.get("auth");
+
+    if (googleAuthResult === "google-error") {
+      setUser(null);
+      setView("landing");
+      toast.error("Google sign-in failed. Please try again or use email.");
+      clearAuthQueryParams();
+      return;
+    }
+
     fetch("/api/auth/me", {
       credentials: "include",
     })
@@ -128,9 +174,22 @@ export default function App() {
         if (res.ok) return res.json();
         throw new Error("Session expired");
       })
-      .then((data) => setUser(data.user))
+      .then((data) => {
+        if (googleAuthResult === "google-success") {
+          routeAuthenticatedUser(data, "google_oauth_callback");
+          toast.success("Signed in with Google");
+          clearAuthQueryParams();
+        } else {
+          setUser(data.user);
+        }
+      })
       .catch(() => {
         setUser(null);
+        if (googleAuthResult === "google-success") {
+          setView("landing");
+          toast.error("Google sign-in completed, but the session was not found.");
+          clearAuthQueryParams();
+        }
       });
   }, []);
 
@@ -145,19 +204,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (googleClientId) return;
-
     fetch("/api/auth/config")
       .then((res) => (res.ok ? res.json() : null))
       .then((config) => {
-        if (config?.googleClientId) {
-          setGoogleClientId(config.googleClientId);
-        }
+        setIsGoogleAuthAvailable(Boolean(config?.googleAuthAvailable));
       })
       .catch(() => {
-        setGoogleAuthFailed(true);
+        setIsGoogleAuthAvailable(false);
       });
-  }, [googleClientId]);
+  }, []);
 
   const handleLogin = (email, password) => {
     return fetch("/api/login", {
@@ -174,12 +229,7 @@ export default function App() {
         return res.json();
       })
       .then((data) => {
-        // Token is now in HTTP-only cookie
-        setUser(data.user);
-        setAuthModalOpen(false);
-        // Correctly route to dashboard for both admin and client
-        // The Dashboard component handles the inner routing based on role
-        setView("dashboard");
+        routeAuthenticatedUser(data, "email_password_login");
       });
   };
 
@@ -203,9 +253,7 @@ export default function App() {
         return data;
       })
       .then((data) => {
-        setUser(data.user);
-        setAuthModalOpen(false);
-        setView("dashboard");
+        routeAuthenticatedUser(data, "email_password_signup");
       });
   };
 
@@ -234,36 +282,9 @@ export default function App() {
     if (newView !== "plan-completion") setSelectedPlan(null);
   };
 
-  const handleGoogleLogin = (tokenResponse) => {
-    const token = tokenResponse.access_token || tokenResponse.credential;
-    return fetch("/api/signup/verify-google", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ token, mode: "login" }),
-      credentials: "include",
-    })
-      .then(async (res) => {
-        if (res.ok) return res.json();
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(
-          errData.error || errData.details || "Google auth failed"
-        );
-      })
-      .then((data) => {
-        // Token is now in HTTP-only cookie
-        setUser(data.user);
-        setAuthModalOpen(false);
-        setView("dashboard");
-        toast.success("Signed in with Google");
-      })
-      .catch((err) => {
-        console.error("Google Login Error:", err);
-        setGoogleAuthFailed(true);
-        toast.error("Google auth failed. Continue with email and password.");
-        throw err;
-      });
+  const handleGoogleLogin = ({ mode = "login" } = {}) => {
+    const params = new URLSearchParams({ mode });
+    window.location.assign(`/api/auth/google/start?${params.toString()}`);
   };
 
   const handleRequestPasswordReset = (email) => {
@@ -301,8 +322,6 @@ export default function App() {
         return data;
       });
   };
-
-  const isGoogleAuthAvailable = Boolean(googleClientId) && !googleAuthFailed;
 
   const appContent = (
     <div className={`min-h-screen ${mode} transition-colors duration-300`}>
@@ -412,7 +431,7 @@ export default function App() {
                 onLogin={handleLogin}
                 onSignup={handleSignup}
                 onGoogleLogin={handleGoogleLogin}
-                onGoogleUnavailable={() => setGoogleAuthFailed(true)}
+                onGoogleUnavailable={() => setIsGoogleAuthAvailable(false)}
                 onRequestPasswordReset={handleRequestPasswordReset}
                 onResetPassword={handleResetPassword}
                 resetToken={resetToken}
@@ -427,18 +446,5 @@ export default function App() {
     </div>
   );
 
-  return (
-    isGoogleAuthAvailable ? (
-      <GoogleOAuthProvider
-        clientId={googleClientId}
-        onScriptLoadError={() =>
-          console.error("Google Sign-In script failed to load")
-        }
-      >
-        {appContent}
-      </GoogleOAuthProvider>
-    ) : (
-      appContent
-    )
-  );
+  return appContent;
 }
