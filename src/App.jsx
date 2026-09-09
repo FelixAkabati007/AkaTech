@@ -84,7 +84,10 @@ export default function App() {
         if (res.ok) return res.json();
         throw new Error("Session expired");
       })
-      .then((data) => setUser(data.user))
+      .then((data) => {
+        setUser(data.user);
+        setView("dashboard");
+      })
       .catch(() => {
         setUser(null);
       });
@@ -156,7 +159,9 @@ export default function App() {
         );
       })
       .then((data) => {
-        // Token is now in HTTP-only cookie
+        if (!data?.user?.id || !data.user.role) {
+          throw new Error("Google sign-in returned an incomplete user session");
+        }
         setUser(data.user);
         setAuthModalOpen(false);
         setView("dashboard");
