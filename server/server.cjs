@@ -431,16 +431,20 @@ app.post("/api/signup/verify-google", async (req, res) => {
       };
     }
 
-    if (!googleUser.email)
+    const normalizedEmail = googleUser.email?.trim().toLowerCase();
+    if (!normalizedEmail)
       return res
         .status(400)
         .json({ error: "Email not found in Google profile" });
 
-    // Special Admin Logic
-    let role = "client";
-    if (ADMIN_EMAIL && googleUser.email === ADMIN_EMAIL) {
-      role = "admin";
+    if (googleUser.email_verified === false) {
+      return res.status(403).json({ error: "Google email is not verified" });
     }
+
+    // Admin access is granted only to the explicitly configured account.
+    const configuredAdminEmail = ADMIN_EMAIL?.trim().toLowerCase();
+    const role = configuredAdminEmail === normalizedEmail ? "admin" : "client";
+    googleUser.email = normalizedEmail;
 
     let user = await dal.getUserByEmail(googleUser.email);
 
