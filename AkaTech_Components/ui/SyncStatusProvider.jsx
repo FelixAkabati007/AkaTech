@@ -50,6 +50,7 @@ export const SyncStatusProvider = ({ children }) => {
     });
 
     // Listen for data events to show "Syncing..." state
+    const syncTimers = new Set();
     const dataEvents = [
       "new_invoice_request",
       "invoice_paid",
@@ -65,14 +66,23 @@ export const SyncStatusProvider = ({ children }) => {
       newSocket.on(event, () => {
         setStatus("syncing");
         // Revert to synced after a short delay to show the activity
-        setTimeout(() => {
+        const timer = window.setTimeout(() => {
+          syncTimers.delete(timer);
           setStatus((prev) => (prev === "syncing" ? "synced" : prev));
           setLastSync(new Date());
         }, 1500);
+        syncTimers.add(timer);
       });
     });
 
     return () => {
+      dataEvents.forEach((event) => newSocket.off(event));
+      newSocket.off("connect");
+      newSocket.off("disconnect");
+      newSocket.off("connect_error");
+      newSocket.off("heartbeat");
+      syncTimers.forEach((timer) => window.clearTimeout(timer));
+      syncTimers.clear();
       newSocket.disconnect();
     };
   }, []);

@@ -26,11 +26,14 @@ const server = http.createServer(app);
 
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 const ALLOWED_ORIGINS = [
-  CLIENT_URL,
-  "https://aka-tech-two.vercel.app",
-  "http://localhost:5173", // Vite default
-  "http://localhost:5175", // Current dev port
-  "http://localhost:3000", // Common alternative
+  ...new Set([
+    CLIENT_URL,
+    process.env.VERCEL_PREVIEW_URL,
+    "https://aka-tech-two.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:5175",
+    "http://localhost:3000",
+  ].filter(Boolean)),
 ];
 
 if (!process.env.GOOGLE_CLIENT_ID) {
@@ -89,8 +92,7 @@ app.use(
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
       if (
-        ALLOWED_ORIGINS.indexOf(origin) !== -1 ||
-        origin.endsWith(".vercel.app")
+        ALLOWED_ORIGINS.includes(origin)
       ) {
         callback(null, true);
       } else {
@@ -129,15 +131,26 @@ const limiter = rateLimit({
 });
 app.use("/api/", limiter);
 
-// --- Encryption Helper (Simple for Demo) ---
+// Authenticated encryption for sensitive stored fields.
+const ENCRYPTION_KEY = crypto
+  .createHash("sha256")
+  .update(process.env.DATA_ENCRYPTION_KEY || SECRET_KEY)
+  .digest();
+
 const encrypt = (text) => {
-  // In a real app, use crypto with a proper key/iv.
-  // For this demo, we'll base64 encode to simulate "storage format"
-  return Buffer.from(text).toString("base64");
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", ENCRYPTION_KEY, iv);
+  const ciphertext = Buffer.concat([cipher.update(String(text), "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${ciphertext.toString("base64url")}`;
 };
 
-const decrypt = (text) => {
-  return Buffer.from(text, "base64").toString("utf8");
+const decrypt = (value) => {
+  if (!value?.startsWith("v1:")) return Buffer.from(value, "base64").toString("utf8");
+  const [, iv, tag, ciphertext] = value.split(":");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", ENCRYPTION_KEY, Buffer.from(iv, "base64url"));
+  decipher.setAuthTag(Buffer.from(tag, "base64url"));
+  return Buffer.concat([decipher.update(Buffer.from(ciphertext, "base64url")), decipher.final()]).toString("utf8");
 };
 
 // --- Audit Log Helper ---
@@ -208,6 +221,9 @@ app.post("/api/webhooks/payment", async (req, res) => {
     console.log(`Webhook received from ${provider || "unknown"}:`, req.body);
 
     // Signature Verification (Paystack)
+    if (process.env.PAYSTACK_SECRET_KEY && !paystackSignature) {
+      return res.status(401).json({ error: "Missing Paystack signature" });
+    }
     if (process.env.PAYSTACK_SECRET_KEY && paystackSignature) {
       const hash = crypto
         .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY)
@@ -222,6 +238,9 @@ app.post("/api/webhooks/payment", async (req, res) => {
     }
 
     // Signature Verification (Stripe)
+    if (process.env.STRIPE_WEBHOOK_SECRET && !stripeSignature) {
+      return res.status(401).json({ error: "Missing Stripe signature" });
+    }
     if (process.env.STRIPE_WEBHOOK_SECRET && stripeSignature) {
       try {
         const parts = stripeSignature.split(",");
@@ -412,16 +431,20 @@ app.post("/api/signup/verify-google", async (req, res) => {
       };
     }
 
-    if (!googleUser.email)
+    const normalizedEmail = googleUser.email?.trim().toLowerCase();
+    if (!normalizedEmail)
       return res
         .status(400)
         .json({ error: "Email not found in Google profile" });
 
-    // Special Admin Logic
-    let role = "client";
-    if (ADMIN_EMAIL && googleUser.email === ADMIN_EMAIL) {
-      role = "admin";
+    if (googleUser.email_verified === false) {
+      return res.status(403).json({ error: "Google email is not verified" });
     }
+
+    // Admin access is granted only to the explicitly configured account.
+    const configuredAdminEmail = ADMIN_EMAIL?.trim().toLowerCase();
+    const role = configuredAdminEmail === normalizedEmail ? "admin" : "client";
+    googleUser.email = normalizedEmail;
 
     let user = await dal.getUserByEmail(googleUser.email);
 
@@ -487,7 +510,6 @@ app.post("/api/signup/verify-google", async (req, res) => {
 
     const { passwordHash, ...safeUser } = user;
     res.json({
-      token: sessionToken,
       user: { ...safeUser, hasPassword: !!passwordHash },
       email: user.email,
     });
