@@ -166,25 +166,19 @@ export default function App() {
       });
   };
 
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim();
 
   useEffect(() => {
     if (!googleClientId) {
-      console.error(
-        "Critical Error: VITE_GOOGLE_CLIENT_ID is missing in environment variables. Google Auth will fail."
-      );
-    } else {
-      // Debug log to ensure Client ID is loaded (masked for security)
-      console.log(
-        "Google Client ID loaded:",
-        googleClientId.substring(0, 10) + "..."
+      console.warn(
+        "Google Sign-In is disabled because VITE_GOOGLE_CLIENT_ID is not configured."
       );
     }
   }, [googleClientId]);
 
   return (
     <GoogleOAuthProvider
-      clientId={googleClientId}
+      clientId={googleClientId || "google-auth-disabled"}
       onScriptLoadError={() =>
         console.error("Google Sign-In script failed to load")
       }
@@ -286,6 +280,7 @@ export default function App() {
                 onClose={() => setAuthModalOpen(false)}
                 onLogin={handleLogin}
                 onGoogleLogin={handleGoogleLogin}
+                googleEnabled={Boolean(googleClientId)}
               />
               <Toaster position="top-center" />
             </div>

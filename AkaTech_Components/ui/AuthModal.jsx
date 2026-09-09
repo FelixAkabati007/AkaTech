@@ -5,28 +5,41 @@ import { Icons } from "@components/ui/Icons";
 import { Logo } from "@components/ui/Logo";
 import { useToast } from "@components/ui/ToastProvider";
 
+const GoogleLoginButton = ({ isLoginView, onGoogleLogin, addToast }) => {
+  const googleLogin = useGoogleLogin({
+    onSuccess: (tokenResponse) => {
+      onGoogleLogin?.(tokenResponse);
+      addToast("Signed in with Google", "success");
+    },
+    onError: () => addToast("Google Sign In Failed", "error"),
+  });
+
+  return (
+    <button
+      onClick={() => googleLogin()}
+      className="w-full bg-gray-50 dark:bg-white text-black py-3 mb-6 flex items-center justify-center gap-3 hover:bg-gray-100 dark:hover:bg-gray-200 transition border border-gray-200 dark:border-transparent"
+    >
+      <Icons.Google className="w-5 h-5" />
+      <span className="text-xs font-bold uppercase tracking-wider">
+        {isLoginView ? "Sign in with Google" : "Sign up with Google"}
+      </span>
+    </button>
+  );
+};
+
 export const AuthModal = ({
   isOpen,
   onClose,
   onLogin,
   onSignup,
   onGoogleLogin,
+  googleEnabled = true,
 }) => {
   const [isLoginView, setIsLoginView] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const { addToast } = useToast();
   const modalRef = useRef(null);
-
-  const googleLogin = useGoogleLogin({
-    onSuccess: (tokenResponse) => {
-      if (onGoogleLogin) {
-        onGoogleLogin(tokenResponse);
-        addToast("Signed in with Google", "success");
-      }
-    },
-    onError: () => addToast("Google Sign In Failed", "error"),
-  });
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -149,15 +162,13 @@ export const AuthModal = ({
               </p>
             </div>
 
-            <button
-              onClick={() => googleLogin()}
-              className="w-full bg-gray-50 dark:bg-white text-black py-3 mb-6 flex items-center justify-center gap-3 hover:bg-gray-100 dark:hover:bg-gray-200 transition border border-gray-200 dark:border-transparent"
-            >
-              <Icons.Google className="w-5 h-5" />
-              <span className="text-xs font-bold uppercase tracking-wider">
-                {isLoginView ? "Sign in with Google" : "Sign up with Google"}
-              </span>
-            </button>
+            {googleEnabled && (
+              <GoogleLoginButton
+                isLoginView={isLoginView}
+                onGoogleLogin={onGoogleLogin}
+                addToast={addToast}
+              />
+            )}
 
             <div className="flex items-center gap-4 mb-6">
               <div className="h-[1px] bg-gray-200 dark:bg-white/10 flex-1"></div>
