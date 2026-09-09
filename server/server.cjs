@@ -49,7 +49,8 @@ if (!process.env.GOOGLE_CLIENT_ID) {
   );
 }
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+const ADMIN_EMAIL =
+  process.env.ADMIN_EMAIL?.trim().toLowerCase() || "felixakabati007@gmail.com";
 
 const io = new Server(server, {
   cors: {
@@ -468,8 +469,11 @@ app.post("/api/signup/verify-google", async (req, res) => {
 
       await logAudit("USER_REGISTER_GOOGLE", user.id, { email: user.email });
     } else {
-      // Existing user
+      // Existing user: reconcile the role from the server-side allowlist.
       const updates = {};
+      if (user.role !== role && normalizedEmail === configuredAdminEmail) {
+        updates.role = "admin";
+      }
       if (!user.googleId) {
         updates.googleId = googleUser.sub;
       }
