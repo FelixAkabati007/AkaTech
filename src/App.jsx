@@ -93,6 +93,27 @@ export default function App() {
       });
   }, []);
 
+  const loadAuthenticatedUser = async (fallbackUser) => {
+    const sessionResponse = await fetch("/api/auth/me", {
+      credentials: "include",
+    });
+
+    if (sessionResponse.ok) {
+      const session = await sessionResponse.json();
+      if (session?.user?.id) return session.user;
+    }
+
+    if (fallbackUser?.id) return fallbackUser;
+    throw new Error("Authenticated session could not be loaded");
+  };
+
+  const completeLogin = async (fallbackUser) => {
+    const authenticatedUser = await loadAuthenticatedUser(fallbackUser);
+    setUser(authenticatedUser);
+    setAuthModalOpen(false);
+    setView("dashboard");
+  };
+
   const handleLogin = (email, password) => {
     return fetch("/api/login", {
       method: "POST",
@@ -107,14 +128,7 @@ export default function App() {
         }
         return res.json();
       })
-      .then((data) => {
-        // Token is now in HTTP-only cookie
-        setUser(data.user);
-        setAuthModalOpen(false);
-        // Correctly route to dashboard for both admin and client
-        // The Dashboard component handles the inner routing based on role
-        setView("dashboard");
-      });
+      .then((data) => completeLogin(data.user));
   };
 
   const handleUserUpdate = (updatedUser) => {
@@ -158,14 +172,7 @@ export default function App() {
           errData.error || errData.details || "Google auth failed"
         );
       })
-      .then((data) => {
-        if (!data?.user?.id || !data.user.role) {
-          throw new Error("Google sign-in returned an incomplete user session");
-        }
-        setUser(data.user);
-        setAuthModalOpen(false);
-        setView("dashboard");
-      })
+      .then((data) => completeLogin(data.user))
       .catch((err) => {
         console.error("Google Login Error:", err);
       });
