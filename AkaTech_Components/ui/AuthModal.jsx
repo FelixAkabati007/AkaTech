@@ -21,7 +21,7 @@ const GoogleLoginButton = ({ isLoginView, onGoogleLogin, addToast }) => {
     >
       <Icons.Google className="w-5 h-5" />
       <span className="text-xs font-bold uppercase tracking-wider">
-        {isLoginView ? "Sign in with Google" : "Sign up with Google"}
+        {isLoginView ? "Sign in with Google" : "Continue as guest with Google"}
       </span>
     </button>
   );
@@ -218,7 +218,7 @@ export const AuthModal = ({
               ) : (
                 <div className="text-center py-4">
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Secure account creation is now exclusively via Google.
+                    Continue as a guest with Google to access your dashboard. Admin access is granted only to the configured admin account.
                   </p>
                 </div>
               )}
