@@ -52,6 +52,9 @@ if (!process.env.GOOGLE_CLIENT_ID) {
 const ADMIN_EMAIL =
   process.env.ADMIN_EMAIL?.trim().toLowerCase() || "felixakabati007@gmail.com";
 
+const isConfiguredAdminEmail = (email) =>
+  email?.trim().toLowerCase() === ADMIN_EMAIL;
+
 const io = new Server(server, {
   cors: {
     origin: ALLOWED_ORIGINS,
@@ -443,8 +446,7 @@ app.post("/api/signup/verify-google", async (req, res) => {
     }
 
     // Admin access is granted only to the explicitly configured account.
-    const configuredAdminEmail = ADMIN_EMAIL?.trim().toLowerCase();
-    const role = configuredAdminEmail === normalizedEmail ? "admin" : "client";
+    const role = isConfiguredAdminEmail(normalizedEmail) ? "admin" : "client";
     googleUser.email = normalizedEmail;
 
     let user = await dal.getUserByEmail(googleUser.email);
@@ -471,8 +473,9 @@ app.post("/api/signup/verify-google", async (req, res) => {
     } else {
       // Existing user: reconcile the role from the server-side allowlist.
       const updates = {};
-      if (user.role !== role && normalizedEmail === configuredAdminEmail) {
+      if (role === "admin" && user.role !== "admin") {
         updates.role = "admin";
+        user.role = "admin";
       }
       if (!user.googleId) {
         updates.googleId = googleUser.sub;
@@ -572,6 +575,14 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
   if (!user) {
     return res.status(404).json({ message: "User not found" });
   }
+
+  // Reconcile the admin allowlist on every session restore so an older client
+  // role or JWT cannot strand the configured admin on the client dashboard.
+  if (isConfiguredAdminEmail(user.email) && user.role !== "admin") {
+    user.role = "admin";
+    await dal.updateUser(user.id, { role: "admin" });
+  }
+
   const { passwordHash, ...safeUser } = user;
   res.json({ user: { ...safeUser, hasPassword: !!passwordHash } });
 });
