@@ -66,7 +66,9 @@ export default defineConfig(({ mode }) => {
   server: {
     host: true,
     port: 5173,
-    strictPort: false,
+    // Keep the browser origin stable so Google OAuth does not alternate
+    // between localhost:5173 and localhost:5174 when the port is busy.
+    strictPort: true,
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
       "Referrer-Policy": "no-referrer-when-downgrade",
