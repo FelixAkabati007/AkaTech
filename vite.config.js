@@ -2,9 +2,50 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { fileURLToPath } from "url";
+import { spawn } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Starts the Express API alongside the Vite dev server so the single-process
+// preview boots the full stack. The frontend proxies /api to this process.
+function apiServerPlugin(env) {
+  let apiProcess;
+
+  const start = () => {
+    if (apiProcess) return;
+    apiProcess = spawn("node", ["server/server.cjs"], {
+      cwd: __dirname,
+      stdio: "inherit",
+      env: { ...process.env, ...env },
+    });
+    apiProcess.on("exit", (code) => {
+      if (code && code !== 0) {
+        console.error(`[api] server exited with code ${code}`);
+      }
+      apiProcess = undefined;
+    });
+  };
+
+  const stop = () => {
+    if (apiProcess) {
+      apiProcess.kill();
+      apiProcess = undefined;
+    }
+  };
+
+  return {
+    name: "akatech-api-server",
+    apply: "serve",
+    configureServer() {
+      start();
+      process.once("exit", stop);
+      process.once("SIGINT", stop);
+      process.once("SIGTERM", stop);
+    },
+    closeBundle: stop,
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -14,7 +55,7 @@ export default defineConfig(({ mode }) => {
   define: {
     "import.meta.env.VITE_GOOGLE_CLIENT_ID": JSON.stringify(googleClientId || ""),
   },
-  plugins: [react()],
+  plugins: [react(), apiServerPlugin(env)],
   resolve: {
     alias: {
       "@components": path.resolve(__dirname, "./AkaTech_Components"),

@@ -1,6 +1,11 @@
 const express = require("express");
 const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
+// Load env from every location this app may store it, so the API boots the
+// same way in local dev (.env), the v0 preview (.env.development.local), and
+// production (real process.env, which dotenv never overrides).
+[".env", ".env.local", ".env.development.local"].forEach((file) => {
+  require("dotenv").config({ path: path.join(__dirname, "..", file) });
+});
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const cookieParser = require("cookie-parser");
@@ -77,10 +82,40 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-const SECRET_KEY = process.env.JWT_SECRET;
+
+// JWT_SECRET is required in production. In development/preview we derive a
+// stable secret from other configured secrets so the API can boot without an
+// extra env var while still keeping issued tokens valid across restarts.
+const deriveDevSecret = () => {
+  const material = [
+    process.env.DATABASE_URL,
+    process.env.ADMIN_PASSWORD,
+    process.env.GOOGLE_CLIENT_SECRET,
+  ]
+    .filter(Boolean)
+    .join("|");
+
+  if (!material) return null;
+  return crypto.createHash("sha256").update(material).digest("hex");
+};
+
+let SECRET_KEY = process.env.JWT_SECRET;
 if (!SECRET_KEY) {
-  console.error("FATAL: JWT_SECRET is not defined in .env");
-  process.exit(1);
+  if (process.env.NODE_ENV === "production") {
+    console.error("FATAL: JWT_SECRET is not defined in production.");
+    process.exit(1);
+  }
+
+  SECRET_KEY = deriveDevSecret();
+  if (!SECRET_KEY) {
+    console.error(
+      "FATAL: JWT_SECRET is not set and no fallback secret material is available."
+    );
+    process.exit(1);
+  }
+  console.warn(
+    "[auth] JWT_SECRET not set — using a derived development secret. Set JWT_SECRET for production."
+  );
 }
 
 // --- Middleware ---
