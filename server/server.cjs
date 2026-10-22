@@ -49,10 +49,13 @@ if (!GOOGLE_CLIENT_ID) {
   logger.info("Google Auth configured");
 }
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
-const NORMALIZED_ADMIN_EMAIL = String(ADMIN_EMAIL || "")
+// Temporary local admin access. Override both values with environment variables before production.
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@akatech.com";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin@12345";
+const NORMALIZED_ADMIN_EMAIL = String(ADMIN_EMAIL)
   .trim()
   .toLowerCase();
+const ADMIN_PASSWORD_HASH = bcrypt.hashSync(ADMIN_PASSWORD, 12);
 
 const io = new Server(server, {
   cors: {
@@ -1906,7 +1909,23 @@ app.post("/api/login", async (req, res) => {
     let user = await dal.getUserByEmail(normalizedEmail);
 
     if (!user) {
-      return res.status(401).json({ error: "Invalid credentials" });
+      const isTemporaryAdminLogin =
+        normalizedEmail === NORMALIZED_ADMIN_EMAIL &&
+        (await bcrypt.compare(password, ADMIN_PASSWORD_HASH));
+
+      if (isTemporaryAdminLogin) {
+        user = {
+          id: "temporary-admin",
+          email: NORMALIZED_ADMIN_EMAIL,
+          username: NORMALIZED_ADMIN_EMAIL,
+          name: "Administrator",
+          role: "admin",
+          passwordHash: ADMIN_PASSWORD_HASH,
+          hasPassword: true,
+        };
+      } else {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
     }
 
     // 3. Verify Password
