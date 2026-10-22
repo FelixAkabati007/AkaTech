@@ -1,5 +1,6 @@
 const { Pool, Client } = require("pg");
 const { drizzle } = require("drizzle-orm/node-postgres");
+const logger = require("../logging/logger.cjs");
 const schema = require("./schema.cjs");
 
 class ConnectionManager {
@@ -88,18 +89,19 @@ class ConnectionManager {
   }
 
   getMetrics() {
-    const size = this.pool ? this.pool.idleCount : 0;
-    const waiting = this.pool ? this.pool.waitingCount : 0;
+    const idleConnections = this.pool ? this.pool.idleCount : 0;
+    const waitingRequests = this.pool ? this.pool.waitingCount : 0;
+    const totalConnections = this.pool ? this.pool.totalCount : 0;
+    const activeConnections = Math.max(totalConnections - idleConnections, 0);
 
     return {
       ...this.metrics,
-      idleConnections: size,
-      waitingRequests: waiting,
-      utilizationPercent: this.metrics.totalConnections
-        ? Math.round(
-            ((this.metrics.activeConnections / this.metrics.totalConnections) *
-              100)
-          )
+      totalConnections,
+      activeConnections,
+      idleConnections,
+      waitingRequests,
+      utilizationPercent: totalConnections
+        ? Math.round((activeConnections / totalConnections) * 100)
         : 0,
     };
   }
