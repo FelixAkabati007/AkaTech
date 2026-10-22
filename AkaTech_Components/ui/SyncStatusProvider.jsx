@@ -14,6 +14,38 @@ export const SyncStatusProvider = ({ children }) => {
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
+    let healthTimer;
+    let disposed = false;
+
+    const checkDatabaseHealth = async () => {
+      try {
+        const response = await fetch(`${SOCKET_URL}/api/health`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const health = await response.json();
+
+        if (disposed) return;
+
+        console.log("[v0] Database health response", { ok: response.ok, healthy: health.healthy, status: health.status });
+        if (response.ok && health.healthy) {
+          setStatus((previous) => (previous === "syncing" ? previous : "synced"));
+          setErrorMessage("");
+          setLastSync(new Date(health.timestamp || Date.now()));
+        } else {
+          setStatus("error");
+          setErrorMessage(health.checks?.connection?.error || "Database health check failed");
+        }
+      } catch (error) {
+        if (disposed) return;
+        setStatus("error");
+        setErrorMessage(error?.message || "Database health check failed");
+      }
+    };
+
+    checkDatabaseHealth();
+    healthTimer = window.setInterval(checkDatabaseHealth, 15000);
+
     const newSocket = io(SOCKET_URL, {
       path: "/socket.io",
       transports: ["websocket", "polling"],
@@ -33,15 +65,17 @@ export const SyncStatusProvider = ({ children }) => {
     });
 
     newSocket.on("disconnect", (reason) => {
-      setStatus("offline");
+      // Socket.IO is an optional real-time activity channel. Do not mark the
+      // database offline when only the activity channel disconnects.
       if (reason === "io server disconnect") {
         newSocket.connect();
       }
     });
 
     newSocket.on("connect_error", (err) => {
-      setStatus("error");
-      setErrorMessage("Connection failed");
+      // Database availability is determined by the live health endpoint below;
+      // Socket.IO is optional and only provides real-time activity events.
+      setErrorMessage(err?.message || "Real-time updates unavailable");
     });
 
     newSocket.on("heartbeat", (data) => {
@@ -76,6 +110,8 @@ export const SyncStatusProvider = ({ children }) => {
     });
 
     return () => {
+      disposed = true;
+      window.clearInterval(healthTimer);
       dataEvents.forEach((event) => newSocket.off(event));
       newSocket.off("connect");
       newSocket.off("disconnect");
