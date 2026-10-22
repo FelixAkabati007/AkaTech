@@ -1,4 +1,6 @@
-const { db } = require("./db/index.cjs");
+const { getDb } = require("./db/connectionManager.cjs");
+const { withRetry, retryConfig } = require("./db/retry.cjs");
+const logger = require("./logging/logger.cjs");
 const {
   users,
   projects,
@@ -10,147 +12,176 @@ const {
   subscriptions,
   invoices,
   systemSettings,
+  passwordResetTokens,
 } = require("./db/schema.cjs");
-const { eq, desc, and, or, notInArray, sql } = require("drizzle-orm");
+const { eq, desc, and, or, notInArray, sql, isNull, gt } = require("drizzle-orm");
+
+let dbInstance = null;
+
+const getDatabase = async () => {
+  if (!dbInstance) {
+    dbInstance = await getDb();
+  }
+  return dbInstance;
+};
 
 // Dashboard Stats
 const getDashboardStats = async () => {
-  if (!db) return null;
-  console.log("Fetching dashboard stats...");
-  try {
-    // 1. Total Users
-    const usersCount = await db
-      .select({ count: sql`count(*)` })
-      .from(users)
-      .then((res) => parseInt(res[0].count));
-    console.log("Users count fetched:", usersCount);
+  return withRetry(
+    async () => {
+      logger.info("Fetching dashboard stats...");
+      const database = await getDatabase();
 
-    // 2. Active Projects (not completed or rejected)
-    const activeProjectsCount = await db
-      .select({ count: sql`count(*)` })
-      .from(projects)
-      .where(notInArray(projects.status, ["completed", "rejected"]))
-      .then((res) => parseInt(res[0].count));
-    console.log("Active projects fetched:", activeProjectsCount);
+      // 1. Total Users
+      const usersCount = await database
+        .select({ count: sql`count(*)` })
+        .from(users)
+        .then((res) => parseInt(res[0].count));
+      logger.debug("Users count fetched", { usersCount });
 
-    // 3. Pending Tickets (not resolved or closed)
-    const pendingTicketsCount = await db
-      .select({ count: sql`count(*)` })
-      .from(tickets)
-      .where(notInArray(tickets.status, ["resolved", "closed"]))
-      .then((res) => parseInt(res[0].count));
-    console.log("Pending tickets fetched:", pendingTicketsCount);
+      // 2. Active Projects (not completed or rejected)
+      const activeProjectsCount = await database
+        .select({ count: sql`count(*)` })
+        .from(projects)
+        .where(notInArray(projects.status, ["completed", "rejected"]))
+        .then((res) => parseInt(res[0].count));
+      logger.debug("Active projects fetched", { activeProjectsCount });
 
-    // 4. Total Revenue (Sum of paid invoices)
-    const paidInvoices = await db
-      .select()
-      .from(invoices)
-      .where(or(eq(invoices.status, "paid"), eq(invoices.status, "Paid")));
+      // 3. Pending Tickets (not resolved or closed)
+      const pendingTicketsCount = await database
+        .select({ count: sql`count(*)` })
+        .from(tickets)
+        .where(notInArray(tickets.status, ["resolved", "closed"]))
+        .then((res) => parseInt(res[0].count));
+      logger.debug("Pending tickets fetched", { pendingTicketsCount });
 
-    const totalRevenue = paidInvoices.reduce((acc, inv) => {
-      // Remove non-numeric chars except dot
-      const cleanAmount = inv.amount ? inv.amount.replace(/[^0-9.]/g, "") : "0";
-      return acc + (parseFloat(cleanAmount) || 0);
-    }, 0);
-    console.log("Total revenue calculated:", totalRevenue);
+      // 4. Total Revenue (Sum of paid invoices)
+      const paidInvoices = await database
+        .select()
+        .from(invoices)
+        .where(or(eq(invoices.status, "paid"), eq(invoices.status, "Paid")));
 
-    // 5. Outstanding Revenue (Sum of invoices not paid/cancelled)
-    const outstandingInvoices = await db
-      .select()
-      .from(invoices)
-      .where(
-        notInArray(invoices.status, ["paid", "Paid", "cancelled", "Cancelled"])
-      );
+      const totalRevenue = paidInvoices.reduce((acc, inv) => {
+        const cleanAmount = inv.amount ? inv.amount.replace(/[^0-9.]/g, "") : "0";
+        return acc + (parseFloat(cleanAmount) || 0);
+      }, 0);
+      logger.debug("Total revenue calculated", { totalRevenue });
 
-    const outstandingRevenue = outstandingInvoices.reduce((acc, inv) => {
-      const cleanAmount = inv.amount ? inv.amount.replace(/[^0-9.]/g, "") : "0";
-      return acc + (parseFloat(cleanAmount) || 0);
-    }, 0);
-    console.log("Outstanding revenue calculated:", outstandingRevenue);
+      // 5. Outstanding Revenue (Sum of invoices not paid/cancelled)
+      const outstandingInvoices = await database
+        .select()
+        .from(invoices)
+        .where(
+          notInArray(invoices.status, ["paid", "Paid", "cancelled", "Cancelled"])
+        );
 
-    return {
-      totalUsers: usersCount,
-      activeProjects: activeProjectsCount,
-      pendingTickets: pendingTicketsCount,
-      totalRevenue,
-      outstandingRevenue,
-    };
-  } catch (error) {
-    console.error("Error in getDashboardStats:", error);
-    throw error;
-  }
+      const outstandingRevenue = outstandingInvoices.reduce((acc, inv) => {
+        const cleanAmount = inv.amount ? inv.amount.replace(/[^0-9.]/g, "") : "0";
+        return acc + (parseFloat(cleanAmount) || 0);
+      }, 0);
+      logger.debug("Outstanding revenue calculated", { outstandingRevenue });
+
+      return {
+        totalUsers: usersCount,
+        activeProjects: activeProjectsCount,
+        pendingTickets: pendingTicketsCount,
+        totalRevenue,
+        outstandingRevenue,
+      };
+    },
+    "getDashboardStats",
+    retryConfig.query
+  );
 };
 const getUserByEmail = async (email) => {
-  if (!db) return null;
-  const result = await db.select().from(users).where(eq(users.email, email));
-  return result[0];
+  return withRetry(
+    async () => {
+      const database = await getDatabase();
+      const result = await database.select().from(users).where(eq(users.email, email));
+      return result[0];
+    },
+    "getUserByEmail",
+    retryConfig.query
+  );
 };
 
 const getUserById = async (id) => {
-  if (!db) return null;
-  const result = await db.select().from(users).where(eq(users.id, id));
-  return result[0];
+  return withRetry(
+    async () => {
+      const database = await getDatabase();
+      const result = await database.select().from(users).where(eq(users.id, id));
+      return result[0];
+    },
+    "getUserById",
+    retryConfig.query
+  );
 };
 
 const createUser = async (userData) => {
-  if (!db) return null;
-  const result = await db.insert(users).values(userData).returning();
-  return result[0];
+  return withRetry(
+    async () => {
+      const database = await getDatabase();
+      const result = await database.insert(users).values(userData).returning();
+      return result[0];
+    },
+    "createUser",
+    retryConfig.transaction
+  );
 };
 
 const getAllUsers = async () => {
-  if (!db) return [];
-  return await db.select().from(users);
+  const database = await getDatabase();
+  return await database.select().from(users);
 };
 
 const getClients = async () => {
-  if (!db) return [];
-  return await db.select().from(users).where(eq(users.role, "client"));
+  const database = await getDatabase();
+  return await database.select().from(users).where(eq(users.role, "client"));
 };
 
 // Projects
 const createProject = async (projectData) => {
-  if (!db) return null;
-  const result = await db.insert(projects).values(projectData).returning();
+  const database = await getDatabase();
+  const result = await database.insert(projects).values(projectData).returning();
   return result[0];
 };
 
 const getAllProjects = async () => {
-  if (!db) return [];
-  return await db.select().from(projects).orderBy(desc(projects.createdAt));
+  const database = await getDatabase();
+  return await database.select().from(projects).orderBy(desc(projects.createdAt));
 };
 
 const getProjectsByEmail = async (email) => {
-  if (!db) return [];
-  return await db.select().from(projects).where(eq(projects.email, email));
+  const database = await getDatabase();
+  return await database.select().from(projects).where(eq(projects.email, email));
 };
 
 // Messages
 const createMessage = async (messageData) => {
-  if (!db) return null;
-  const result = await db.insert(messages).values(messageData).returning();
+  const database = await getDatabase();
+  const result = await database.insert(messages).values(messageData).returning();
   return result[0];
 };
 
 const getAllMessages = async () => {
-  if (!db) return [];
-  return await db.select().from(messages).orderBy(desc(messages.createdAt));
+  const database = await getDatabase();
+  return await database.select().from(messages).orderBy(desc(messages.createdAt));
 };
 
 const deleteMessage = async (id) => {
-  if (!db) return;
-  await db.delete(messages).where(eq(messages.id, id));
+  const database = await getDatabase();
+  await database.delete(messages).where(eq(messages.id, id));
 };
 
 // Notifications
 const createNotification = async (notifData) => {
-  if (!db) return null;
-  const result = await db.insert(notifications).values(notifData).returning();
+  const database = await getDatabase();
+  const result = await database.insert(notifications).values(notifData).returning();
   return result[0];
 };
 
 const getNotificationsByUserId = async (userId, role) => {
-  if (!db) return [];
+  const database = await getDatabase();
   const conditions = [
     eq(notifications.userId, userId),
     eq(notifications.target, "all"),
@@ -159,8 +190,7 @@ const getNotificationsByUserId = async (userId, role) => {
     conditions.push(eq(notifications.target, "admin"));
   }
 
-  return await db
-    .select()
+  return await database.select()
     .from(notifications)
     .where(or(...conditions))
     .orderBy(desc(notifications.createdAt));
@@ -168,32 +198,29 @@ const getNotificationsByUserId = async (userId, role) => {
 
 // Audit Logs
 const createAuditLog = async (logData) => {
-  if (!db) return null;
-  await db.insert(auditLogs).values(logData);
+  const database = await getDatabase();
+  await database.insert(auditLogs).values(logData);
 };
 
 const getAllAuditLogs = async () => {
-  if (!db) return [];
-  return await db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt));
+  const database = await getDatabase();
+  return await database.select().from(auditLogs).orderBy(desc(auditLogs.createdAt));
 };
 
 // Signup Progress
 const upsertSignupProgress = async (email, data, step) => {
-  if (!db) return null;
-  const existing = await db
-    .select()
+  const database = await getDatabase();
+  const existing = await database.select()
     .from(signupProgress)
     .where(eq(signupProgress.email, email));
   if (existing.length > 0) {
-    const result = await db
-      .update(signupProgress)
+    const result = await database.update(signupProgress)
       .set({ data, step, updatedAt: new Date() })
       .where(eq(signupProgress.email, email))
       .returning();
     return result[0];
   } else {
-    const result = await db
-      .insert(signupProgress)
+    const result = await database.insert(signupProgress)
       .values({ email, data, step })
       .returning();
     return result[0];
@@ -201,9 +228,8 @@ const upsertSignupProgress = async (email, data, step) => {
 };
 
 const getSignupProgress = async (email) => {
-  if (!db) return null;
-  const result = await db
-    .select()
+  const database = await getDatabase();
+  const result = await database.select()
     .from(signupProgress)
     .where(eq(signupProgress.email, email));
   return result[0];
@@ -211,27 +237,24 @@ const getSignupProgress = async (email) => {
 
 // System Settings
 const getSystemSetting = async (key) => {
-  if (!db) return null;
-  const result = await db
-    .select()
+  const database = await getDatabase();
+  const result = await database.select()
     .from(systemSettings)
     .where(eq(systemSettings.key, key));
   return result[0];
 };
 
 const setSystemSetting = async (key, value) => {
-  if (!db) return null;
+  const database = await getDatabase();
   const existing = await getSystemSetting(key);
   if (existing) {
-    const result = await db
-      .update(systemSettings)
+    const result = await database.update(systemSettings)
       .set({ value, updatedAt: new Date() })
       .where(eq(systemSettings.key, key))
       .returning();
     return result[0];
   } else {
-    const result = await db
-      .insert(systemSettings)
+    const result = await database.insert(systemSettings)
       .values({ key, value })
       .returning();
     return result[0];
@@ -243,9 +266,8 @@ module.exports = {
   getUserById,
   createUser,
   updateUser: async (id, data) => {
-    if (!db) return null;
-    const result = await db
-      .update(users)
+    const database = await getDatabase();
+    const result = await database.update(users)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(users.id, id))
       .returning();
@@ -257,17 +279,16 @@ module.exports = {
   getAllProjects,
   getProjectsByEmail,
   updateProject: async (id, data) => {
-    if (!db) return null;
-    const result = await db
-      .update(projects)
+    const database = await getDatabase();
+    const result = await database.update(projects)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(projects.id, id))
       .returning();
     return result[0];
   },
   deleteProject: async (id) => {
-    if (!db) return;
-    await db.delete(projects).where(eq(projects.id, id));
+    const database = await getDatabase();
+    await database.delete(projects).where(eq(projects.id, id));
   },
 
   // Messages
@@ -275,9 +296,8 @@ module.exports = {
   getAllMessages,
   deleteMessage,
   updateMessage: async (id, data) => {
-    if (!db) return null;
-    const result = await db
-      .update(messages)
+    const database = await getDatabase();
+    const result = await database.update(messages)
       .set({ ...data }) // messages doesn't have updatedAt
       .where(eq(messages.id, id))
       .returning();
@@ -288,9 +308,8 @@ module.exports = {
   createNotification,
   getNotificationsByUserId,
   getAllNotifications: async () => {
-    if (!db) return [];
-    return await db
-      .select()
+    const database = await getDatabase();
+    return await database.select()
       .from(notifications)
       .orderBy(desc(notifications.createdAt));
   },
@@ -303,9 +322,8 @@ module.exports = {
 
   // Notifications (continued)
   markNotificationRead: async (id, userId) => {
-    if (!db) return;
-    const notif = await db
-      .select()
+    const database = await getDatabase();
+    const notif = await database.select()
       .from(notifications)
       .where(eq(notifications.id, id))
       .then((res) => res[0]);
@@ -314,39 +332,34 @@ module.exports = {
     if (notif.target === "all" || notif.target === "admin") {
       const readBy = notif.readBy || [];
       if (!readBy.includes(userId)) {
-        await db
-          .update(notifications)
+        await database.update(notifications)
           .set({ readBy: [...readBy, userId] })
           .where(eq(notifications.id, id));
       }
     } else {
-      await db
-        .update(notifications)
+      await database.update(notifications)
         .set({ read: true })
         .where(eq(notifications.id, id));
     }
   },
 
   markAllNotificationsRead: async (userId) => {
-    if (!db) return;
+    const database = await getDatabase();
 
     // 1. Mark user-specific notifications
-    await db
-      .update(notifications)
+    await database.update(notifications)
       .set({ read: true })
       .where(eq(notifications.userId, userId));
 
     // 2. Mark system-wide notifications
-    const allNotifs = await db
-      .select()
+    const allNotifs = await database.select()
       .from(notifications)
       .where(eq(notifications.target, "all"));
 
     for (const notif of allNotifs) {
       const readBy = notif.readBy || [];
       if (!readBy.includes(userId)) {
-        await db
-          .update(notifications)
+        await database.update(notifications)
           .set({ readBy: [...readBy, userId] })
           .where(eq(notifications.id, notif.id));
       }
@@ -355,35 +368,33 @@ module.exports = {
 
   // Tickets
   createTicket: async (ticketData) => {
-    if (!db) return null;
-    const result = await db.insert(tickets).values(ticketData).returning();
+    const database = await getDatabase();
+    const result = await database.insert(tickets).values(ticketData).returning();
     return result[0];
   },
 
   getAllTickets: async () => {
-    if (!db) return [];
-    return await db.select().from(tickets).orderBy(desc(tickets.createdAt));
+    const database = await getDatabase();
+    return await database.select().from(tickets).orderBy(desc(tickets.createdAt));
   },
 
   getTicketsByEmail: async (email) => {
-    if (!db) return [];
-    return await db
-      .select()
+    const database = await getDatabase();
+    return await database.select()
       .from(tickets)
       .where(eq(tickets.userEmail, email))
       .orderBy(desc(tickets.createdAt));
   },
 
   getTicketById: async (id) => {
-    if (!db) return null;
-    const result = await db.select().from(tickets).where(eq(tickets.id, id));
+    const database = await getDatabase();
+    const result = await database.select().from(tickets).where(eq(tickets.id, id));
     return result[0];
   },
 
   updateTicket: async (id, data) => {
-    if (!db) return null;
-    const result = await db
-      .update(tickets)
+    const database = await getDatabase();
+    const result = await database.update(tickets)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(tickets.id, id))
       .returning();
@@ -391,47 +402,43 @@ module.exports = {
   },
 
   deleteTicket: async (id) => {
-    if (!db) return;
-    await db.delete(tickets).where(eq(tickets.id, id));
+    const database = await getDatabase();
+    await database.delete(tickets).where(eq(tickets.id, id));
   },
 
   // Subscriptions
   createSubscription: async (subData) => {
-    if (!db) return null;
-    const result = await db.insert(subscriptions).values(subData).returning();
+    const database = await getDatabase();
+    const result = await database.insert(subscriptions).values(subData).returning();
     return result[0];
   },
 
   getAllSubscriptions: async () => {
-    if (!db) return [];
-    return await db
-      .select()
+    const database = await getDatabase();
+    return await database.select()
       .from(subscriptions)
       .orderBy(desc(subscriptions.createdAt));
   },
 
   getSubscriptionsByUserId: async (userId) => {
-    if (!db) return [];
-    return await db
-      .select()
+    const database = await getDatabase();
+    return await database.select()
       .from(subscriptions)
       .where(eq(subscriptions.userId, userId))
       .orderBy(desc(subscriptions.createdAt));
   },
 
   getSubscriptionById: async (id) => {
-    if (!db) return null;
-    const result = await db
-      .select()
+    const database = await getDatabase();
+    const result = await database.select()
       .from(subscriptions)
       .where(eq(subscriptions.id, id));
     return result[0];
   },
 
   updateSubscription: async (id, data) => {
-    if (!db) return null;
-    const result = await db
-      .update(subscriptions)
+    const database = await getDatabase();
+    const result = await database.update(subscriptions)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(subscriptions.id, id))
       .returning();
@@ -439,50 +446,47 @@ module.exports = {
   },
 
   deleteSubscription: async (id) => {
-    if (!db) return;
-    await db.delete(subscriptions).where(eq(subscriptions.id, id));
+    const database = await getDatabase();
+    await database.delete(subscriptions).where(eq(subscriptions.id, id));
   },
 
   // Invoices
   createInvoice: async (invoiceData) => {
-    if (!db) return null;
-    const result = await db.insert(invoices).values(invoiceData).returning();
+    const database = await getDatabase();
+    const result = await database.insert(invoices).values(invoiceData).returning();
     return result[0];
   },
 
   getAllInvoices: async () => {
-    if (!db) return [];
-    return await db.select().from(invoices).orderBy(desc(invoices.createdAt));
+    const database = await getDatabase();
+    return await database.select().from(invoices).orderBy(desc(invoices.createdAt));
   },
 
   getInvoicesByUserId: async (userId) => {
-    if (!db) return [];
-    return await db
-      .select()
+    const database = await getDatabase();
+    return await database.select()
       .from(invoices)
       .where(eq(invoices.userId, userId))
       .orderBy(desc(invoices.createdAt));
   },
 
   getInvoiceByReference: async (reference) => {
-    if (!db) return null;
-    const result = await db
-      .select()
+    const database = await getDatabase();
+    const result = await database.select()
       .from(invoices)
       .where(eq(invoices.referenceNumber, reference));
     return result[0];
   },
 
   getInvoiceById: async (id) => {
-    if (!db) return null;
-    const result = await db.select().from(invoices).where(eq(invoices.id, id));
+    const database = await getDatabase();
+    const result = await database.select().from(invoices).where(eq(invoices.id, id));
     return result[0];
   },
 
   updateInvoice: async (id, data) => {
-    if (!db) return null;
-    const result = await db
-      .update(invoices)
+    const database = await getDatabase();
+    const result = await database.update(invoices)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(invoices.id, id))
       .returning();
@@ -490,8 +494,42 @@ module.exports = {
   },
 
   deleteInvoice: async (id) => {
-    if (!db) return;
-    await db.delete(invoices).where(eq(invoices.id, id));
+    const database = await getDatabase();
+    await database.delete(invoices).where(eq(invoices.id, id));
+  },
+
+  createPasswordResetToken: async (tokenData) => {
+    const database = await getDatabase();
+    const result = await database
+      .insert(passwordResetTokens)
+      .values(tokenData)
+      .returning();
+    return result[0];
+  },
+
+  getValidPasswordResetToken: async (tokenHash) => {
+    const database = await getDatabase();
+    const result = await database
+      .select()
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.tokenHash, tokenHash),
+          isNull(passwordResetTokens.usedAt),
+          gt(passwordResetTokens.expiresAt, new Date())
+        )
+      );
+    return result[0];
+  },
+
+  markPasswordResetTokenUsed: async (id) => {
+    const database = await getDatabase();
+    const result = await database
+      .update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(passwordResetTokens.id, id))
+      .returning();
+    return result[0];
   },
 
   // Email Verifications & Progress
@@ -507,15 +545,15 @@ module.exports = {
 
   // System Health
   getSystemHealth: async () => {
-    if (!db) return null;
+    const database = await getDatabase();
     try {
       const start = Date.now();
       // Simple query to check DB connection and latency
-      await db.execute(sql`SELECT 1`);
+      await database.execute(sql`SELECT 1`);
       const latency = Date.now() - start;
 
       // Get DB Size (Postgres specific)
-      const sizeResult = await db.execute(
+      const sizeResult = await database.execute(
         sql`SELECT pg_size_pretty(pg_database_size(current_database())) as size, pg_database_size(current_database()) as raw_size`
       );
       const dbSize = sizeResult[0]?.size || "Unknown";
@@ -533,7 +571,10 @@ module.exports = {
         dbUsage,
       };
     } catch (error) {
-      console.error("Health Check Error:", error);
+      logger.error("Health check failed", {
+        message: error.message,
+        code: error.code
+      });
       return {
         status: "unhealthy",
         error: error.message,

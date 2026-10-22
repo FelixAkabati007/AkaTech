@@ -1,23 +1,23 @@
-const { Pool } = require("pg");
-const { drizzle } = require("drizzle-orm/node-postgres");
-const schema = require("./schema.cjs");
+const { getDb } = require("./connectionManager.cjs");
 
-// Default to a placeholder if not set, but it will fail on query if invalid
-const connectionString = process.env.DATABASE_URL;
+// For backward compatibility, provide db as a lazy getter
+let dbInstance = null;
 
-let db;
-
-if (connectionString) {
-  const pool = new Pool({
-    connectionString: connectionString,
-    ssl: { rejectUnauthorized: false }, // Required for Neon
-    max: 10, // Connection pool size
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 30000, // Increased to 30s to handle Neon cold starts
-  });
-  db = drizzle(pool, { schema });
-} else {
-  console.warn("DATABASE_URL is not set. Database features will fail.");
+async function getDbInstance() {
+  if (!dbInstance) {
+    dbInstance = await getDb();
+  }
+  return dbInstance;
 }
 
-module.exports = { db };
+// Export getDb for new code
+module.exports = {
+  getDb,
+  getDbInstance,
+  // Deprecated: kept for backward compatibility
+  get db() {
+    throw new Error(
+      "db property is deprecated. Use getDb() or getDbInstance() instead."
+    );
+  },
+};

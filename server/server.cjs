@@ -1,11 +1,6 @@
 const express = require("express");
 const path = require("path");
-// Load env from every location this app may store it, so the API boots the
-// same way in local dev (.env), the v0 preview (.env.development.local), and
-// production (real process.env, which dotenv never overrides).
-[".env", ".env.local", ".env.development.local"].forEach((file) => {
-  require("dotenv").config({ path: path.join(__dirname, "..", file) });
-});
+require("dotenv").config({ path: path.join(__dirname, "../.env") });
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const cookieParser = require("cookie-parser");
@@ -22,43 +17,42 @@ const { OAuth2Client } = require("google-auth-library");
 const dal = require("./dal.cjs");
 const {
   sendLoginNotification,
+  sendPasswordResetEmail,
   sendInvoiceEmail,
 } = require("./emailService.cjs");
 const { PROJECT_TYPES } = require("./constants.cjs");
+const { checkDatabaseHealth } = require("./db/healthCheck.cjs");
+const { errorHandler } = require("./errors/errorHandler.cjs");
+const logger = require("./logging/logger.cjs");
 
 const app = express();
 const server = http.createServer(app);
+app.set("trust proxy", 1);
 
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const ALLOWED_ORIGINS = [
-  ...new Set([
-    CLIENT_URL,
-    process.env.VERCEL_PREVIEW_URL,
-    "https://aka-tech-two.vercel.app",
-    "http://localhost:5173",
-    "http://localhost:5175",
-    "http://localhost:3000",
-  ].filter(Boolean)),
+  CLIENT_URL,
+  "https://aka-tech-two.vercel.app",
+  "http://localhost:5173", // Vite default
+  "http://127.0.0.1:5173", // Vite via IPv4
+  "http://localhost:5175", // Current dev port
+  "http://localhost:3000", // Common alternative
 ];
 
-if (!process.env.GOOGLE_CLIENT_ID) {
-  console.warn(
-    "WARNING: GOOGLE_CLIENT_ID is not set in environment variables. Google Auth will fail."
+if (!GOOGLE_CLIENT_ID) {
+  logger.warn(
+    "GOOGLE_CLIENT_ID is not set in environment variables. Google Auth will fail."
   );
 } else {
-  console.log(
-    `Google Auth configured with Client ID: ${process.env.GOOGLE_CLIENT_ID.substring(
-      0,
-      10
-    )}...`
-  );
+  logger.info("Google Auth configured");
 }
 
-const ADMIN_EMAIL =
-  process.env.ADMIN_EMAIL?.trim().toLowerCase() || "felixakabati007@gmail.com";
-
-const isConfiguredAdminEmail = (email) =>
-  email?.trim().toLowerCase() === ADMIN_EMAIL;
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+const NORMALIZED_ADMIN_EMAIL = String(ADMIN_EMAIL || "")
+  .trim()
+  .toLowerCase();
 
 const io = new Server(server, {
   cors: {
@@ -69,52 +63,38 @@ const io = new Server(server, {
 });
 
 // Heartbeat Mechanism
-setInterval(() => {
+const heartbeatInterval = setInterval(() => {
   io.emit("heartbeat", { timestamp: Date.now() });
 }, 5000); // Send heartbeat every 5 seconds
+heartbeatInterval.unref?.();
 
 io.on("connection", (socket) => {
-  console.log(`Client connected: ${socket.id}`);
+  logger.debug("WebSocket client connected", { socketId: socket.id });
 
   socket.on("disconnect", (reason) => {
-    console.log(`Client disconnected: ${socket.id}, reason: ${reason}`);
+    logger.debug("WebSocket client disconnected", { 
+      socketId: socket.id, 
+      reason 
+    });
   });
 });
 
 const PORT = process.env.PORT || 3001;
-
-// JWT_SECRET is required in production. In development/preview we derive a
-// stable secret from other configured secrets so the API can boot without an
-// extra env var while still keeping issued tokens valid across restarts.
-const deriveDevSecret = () => {
-  const material = [
-    process.env.DATABASE_URL,
-    process.env.ADMIN_PASSWORD,
-    process.env.GOOGLE_CLIENT_SECRET,
-  ]
-    .filter(Boolean)
-    .join("|");
-
-  if (!material) return null;
-  return crypto.createHash("sha256").update(material).digest("hex");
-};
-
-let SECRET_KEY = process.env.JWT_SECRET;
+const SECRET_KEY =
+  process.env.JWT_SECRET ||
+  process.env.AUTH_SECRET ||
+  process.env.SESSION_SECRET ||
+  process.env.GOOGLE_CLIENT_SECRET;
 if (!SECRET_KEY) {
-  if (process.env.NODE_ENV === "production") {
-    console.error("FATAL: JWT_SECRET is not defined in production.");
-    process.exit(1);
-  }
-
-  SECRET_KEY = deriveDevSecret();
-  if (!SECRET_KEY) {
-    console.error(
-      "FATAL: JWT_SECRET is not set and no fallback secret material is available."
-    );
-    process.exit(1);
-  }
-  console.warn(
-    "[auth] JWT_SECRET not set — using a derived development secret. Set JWT_SECRET for production."
+  logger.error("FATAL: JWT_SECRET is not defined in .env", {
+    severity: "CRITICAL",
+    action: "Server shutdown"
+  });
+  process.exit(1);
+}
+if (!process.env.JWT_SECRET && process.env.GOOGLE_CLIENT_SECRET) {
+  logger.warn(
+    "JWT_SECRET is missing; using GOOGLE_CLIENT_SECRET as a temporary session-signing fallback. Set JWT_SECRET before deployment."
   );
 }
 
@@ -128,15 +108,11 @@ app.use(
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-      if (
-        ALLOWED_ORIGINS.includes(origin)
-      ) {
+      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
         callback(null, true);
       } else {
-        console.warn("Blocked by CORS:", origin);
-        callback(new Error("Not allowed by CORS"));
+        logger.warn("CORS blocked for origin", { origin });
+        callback(new Error("CORS not allowed"));
       }
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -154,13 +130,57 @@ app.use(cookieParser());
 
 // Request Logger
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+  logger.debug("HTTP request", {
+    method: req.method,
+    path: req.path,
+    url: req.url,
+    ip: req.ip
+  });
   next();
 });
 
-// Health Check
-app.get("/api/health", (req, res) => res.sendStatus(200));
-app.head("/api/health", (req, res) => res.status(200).end());
+// Health Check Endpoints
+app.get("/api/health", async (req, res) => {
+  try {
+    const health = await checkDatabaseHealth();
+    const statusCode = health.healthy ? 200 : 503;
+    res.status(statusCode).json(health);
+  } catch (error) {
+    logger.error("Health check failed", { error: error.message });
+    res.status(503).json({
+      healthy: false,
+      error: "Health check failed",
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+app.head("/api/health", async (req, res) => {
+  try {
+    const health = await checkDatabaseHealth();
+    const statusCode = health.healthy ? 200 : 503;
+    res.status(statusCode).end();
+  } catch (error) {
+    logger.error("Health check failed", { error: error.message });
+    res.status(503).end();
+  }
+});
+
+app.get("/api/auth/config", (req, res) => {
+  res.json({
+    googleAuthAvailable: Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
+    emailPasswordAuthAvailable: Boolean(
+      process.env.DATABASE_URL ||
+        process.env.NEON_DATABASE_URL ||
+        process.env.VITE_DATABASE_URL
+    ),
+    passwordResetAvailable: Boolean(
+      (process.env.EMAIL_USER && process.env.EMAIL_PASS) ||
+        process.env.SMTP_HOST ||
+        process.env.RESEND_API_KEY
+    ),
+  });
+});
 
 // Rate Limiter
 const limiter = rateLimit({
@@ -170,26 +190,85 @@ const limiter = rateLimit({
 });
 app.use("/api/", limiter);
 
-// Authenticated encryption for sensitive stored fields.
-const ENCRYPTION_KEY = crypto
-  .createHash("sha256")
-  .update(process.env.DATA_ENCRYPTION_KEY || SECRET_KEY)
-  .digest();
-
+// --- Encryption Helper (Simple for Demo) ---
 const encrypt = (text) => {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", ENCRYPTION_KEY, iv);
-  const ciphertext = Buffer.concat([cipher.update(String(text), "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${ciphertext.toString("base64url")}`;
+  // In a real app, use crypto with a proper key/iv.
+  // For this demo, we'll base64 encode to simulate "storage format"
+  return Buffer.from(text).toString("base64");
 };
 
-const decrypt = (value) => {
-  if (!value?.startsWith("v1:")) return Buffer.from(value, "base64").toString("utf8");
-  const [, iv, tag, ciphertext] = value.split(":");
-  const decipher = crypto.createDecipheriv("aes-256-gcm", ENCRYPTION_KEY, Buffer.from(iv, "base64url"));
-  decipher.setAuthTag(Buffer.from(tag, "base64url"));
-  return Buffer.concat([decipher.update(Buffer.from(ciphertext, "base64url")), decipher.final()]).toString("utf8");
+const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const isStrongPassword = (password) =>
+  typeof password === "string" &&
+  password.length >= 8 &&
+  /[A-Z]/.test(password) &&
+  /[a-z]/.test(password) &&
+  /\d/.test(password);
+
+const getRoleForEmail = (email) =>
+  normalizeEmail(email) === NORMALIZED_ADMIN_EMAIL ? "admin" : "client";
+
+const getRedirectRouteForUser = (user) =>
+  user?.role === "admin" ? "admin" : "client";
+
+const getRedirectViewForUser = () => "dashboard";
+
+const maskEmailForLog = (email) => {
+  const normalized = normalizeEmail(email);
+  const [local, domain] = normalized.split("@");
+  if (!local || !domain) return "unknown";
+  return `${local.slice(0, 2)}***@${domain}`;
+};
+
+const getAuthEventPayload = (user, source) => ({
+  source,
+  email: maskEmailForLog(user?.email),
+  role: user?.role || "unknown",
+  redirectRoute: getRedirectRouteForUser(user),
+  redirectView: getRedirectViewForUser(user),
+});
+
+const getSafeClientOrigin = (origin) =>
+  origin && ALLOWED_ORIGINS.includes(origin) ? origin : CLIENT_URL;
+
+const getAllowedClientOrigin = (req) => getSafeClientOrigin(req.get("origin"));
+
+const buildClientRedirectUrl = (req, params = {}, origin) => {
+  const url = new URL("/", getSafeClientOrigin(origin || req.get("origin")));
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      url.searchParams.set(key, value);
+    }
+  });
+  return url.toString();
+};
+
+const hashResetToken = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
+const setAuthCookie = (res, token) => {
+  res.cookie("auth_token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    path: "/",
+    maxAge: 24 * 60 * 60 * 1000,
+  });
+};
+
+const createSessionToken = (user) =>
+  jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET_KEY, {
+    expiresIn: "24h",
+  });
+
+const toSafeUser = (user) => {
+  const { passwordHash, ...safeUser } = user;
+  return { ...safeUser, hasPassword: !!passwordHash };
+};
+
+const decrypt = (text) => {
+  return Buffer.from(text, "base64").toString("utf8");
 };
 
 // --- Audit Log Helper ---
@@ -234,7 +313,11 @@ const authenticateToken = async (req, res, next) => {
         .status(403)
         .json({ error: "Forbidden", message: "Invalid or expired token" });
     }
-    console.error("Auth Middleware Error:", err);
+    logger.error("Auth middleware error", {
+      errorName: err.name,
+      message: err.message,
+      path: req.path
+    });
     return res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -257,12 +340,9 @@ app.post("/api/webhooks/payment", async (req, res) => {
     const paystackSignature = req.headers["x-paystack-signature"];
     const stripeSignature = req.headers["stripe-signature"];
 
-    console.log(`Webhook received from ${provider || "unknown"}:`, req.body);
+    logger.info("Payment webhook received", { provider: provider || "unknown" });
 
     // Signature Verification (Paystack)
-    if (process.env.PAYSTACK_SECRET_KEY && !paystackSignature) {
-      return res.status(401).json({ error: "Missing Paystack signature" });
-    }
     if (process.env.PAYSTACK_SECRET_KEY && paystackSignature) {
       const hash = crypto
         .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY)
@@ -270,16 +350,13 @@ app.post("/api/webhooks/payment", async (req, res) => {
         .digest("hex");
 
       if (hash !== paystackSignature) {
-        console.warn("Invalid Paystack signature");
+        logger.warn("Invalid Paystack signature", { reference });
         return res.status(401).json({ error: "Invalid signature" });
       }
-      console.log("Paystack signature verified");
+      logger.info("Paystack webhook signature verified", { reference });
     }
 
     // Signature Verification (Stripe)
-    if (process.env.STRIPE_WEBHOOK_SECRET && !stripeSignature) {
-      return res.status(401).json({ error: "Missing Stripe signature" });
-    }
     if (process.env.STRIPE_WEBHOOK_SECRET && stripeSignature) {
       try {
         const parts = stripeSignature.split(",");
@@ -297,12 +374,15 @@ app.post("/api/webhooks/payment", async (req, res) => {
           .digest("hex");
 
         if (hash !== v1) {
-          console.warn("Invalid Stripe signature");
+          logger.warn("Invalid Stripe signature", { reference });
           return res.status(401).json({ error: "Invalid signature" });
         }
-        console.log("Stripe signature verified");
+        logger.info("Stripe webhook signature verified", { reference });
       } catch (err) {
-        console.warn("Stripe verification failed:", err.message);
+        logger.warn("Stripe verification failed", { 
+          message: err.message,
+          reference 
+        });
         return res.status(401).json({ error: "Invalid signature" });
       }
     }
@@ -367,9 +447,10 @@ app.post("/api/webhooks/payment", async (req, res) => {
                   startDate: new Date(),
                   updatedAt: new Date(),
                 });
-                console.log(
-                  `Activated subscription ${pendingSub.id} for user ${invoice.userId}`
-                );
+                logger.info("Subscription activated from webhook", { 
+                  subscriptionId: pendingSub.id, 
+                  userId: invoice.userId 
+                });
                 // Notify User about subscription
                 await dal.createNotification({
                   userId: invoice.userId,
@@ -380,10 +461,10 @@ app.post("/api/webhooks/payment", async (req, res) => {
                 });
               }
             } catch (subError) {
-              console.error(
-                "Error activating subscription from webhook:",
-                subError
-              );
+              logger.error("Subscription activation from webhook failed", {
+                invoiceId: invoice.id,
+                message: subError?.message
+              });
             }
           }
 
@@ -404,162 +485,282 @@ app.post("/api/webhooks/payment", async (req, res) => {
           // Send Email Receipt
           const user = await dal.getUserById(invoice.userId);
           if (user) {
-            sendInvoiceEmail(user, invoice, "receipt").catch(console.error);
+            sendInvoiceEmail(user, invoice, "receipt").catch((err) => 
+              logger.error("Invoice email send failed", { message: err?.message })
+            );
           }
         }
       } else {
-        console.warn(
-          `Invoice not found for webhook reference: ${finalReference}`
-        );
+        logger.warn("Invoice not found for webhook reference", { finalReference });
         // Don't return 404 to avoid retries from provider
       }
     }
 
     res.json({ received: true });
   } catch (e) {
-    console.error("Webhook Error:", e);
+    logger.error("Webhook processing error", { message: e?.message });
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
 // --- Routes ---
 
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
 
-// Google Auth (Unified for Signup and Login)
+const getGoogleCallbackUrl = (req) =>
+  process.env.GOOGLE_CALLBACK_URL ||
+  `${req.protocol}://${req.get("host")}/api/auth/google/callback`;
 
-app.post("/api/signup/verify-google", async (req, res) => {
-  const { token } = req.body;
-  if (!token) return res.status(400).json({ error: "Token required" });
+const getGoogleProfileFromToken = async (token) => {
+  if (String(token || "").startsWith("ey")) {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    return {
+      sub: payload.sub,
+      email: payload.email,
+      name: payload.name,
+      picture: payload.picture,
+      email_verified: payload.email_verified,
+    };
+  }
 
-  try {
-    let googleUser = {};
+  const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!userInfoRes.ok) {
+    throw new Error("Failed to fetch user info with access token");
+  }
+  const payload = await userInfoRes.json();
+  return {
+    sub: payload.sub,
+    email: payload.email,
+    name: payload.name,
+    picture: payload.picture,
+    email_verified: payload.email_verified,
+  };
+};
 
-    // Check if it's a JWT (ID Token) or Access Token
-    if (token.startsWith("ey")) {
-      // ID Token
-      const ticket = await googleClient.verifyIdToken({
-        idToken: token,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
-      googleUser = {
-        sub: payload.sub,
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture,
-        email_verified: payload.email_verified,
-      };
-    } else {
-      // Access Token
-      const userInfoRes = await fetch(
-        "https://www.googleapis.com/oauth2/v3/userinfo",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      if (!userInfoRes.ok)
-        throw new Error("Failed to fetch user info with access token");
-      const payload = await userInfoRes.json();
-      googleUser = {
-        sub: payload.sub,
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture,
-        email_verified: payload.email_verified, // UserInfo might not have this, but usually implied if we got it?
-      };
-    }
+const completeGoogleAuthentication = async (googleUser, req, mode, source) => {
+  const email = normalizeEmail(googleUser.email);
+  if (!email) {
+    const error = new Error("Email not found in Google profile");
+    error.statusCode = 400;
+    error.code = "GOOGLE_PROFILE_EMAIL_MISSING";
+    throw error;
+  }
 
-    const normalizedEmail = googleUser.email?.trim().toLowerCase();
-    if (!normalizedEmail)
-      return res
-        .status(400)
-        .json({ error: "Email not found in Google profile" });
+  if (googleUser.email_verified === false) {
+    const error = new Error("Google email is not verified");
+    error.statusCode = 401;
+    error.code = "GOOGLE_EMAIL_NOT_VERIFIED";
+    throw error;
+  }
 
-    if (googleUser.email_verified === false) {
-      return res.status(403).json({ error: "Google email is not verified" });
-    }
+  const role = getRoleForEmail(email);
+  let user = await dal.getUserByEmail(email);
 
-    // Admin access is granted only to the explicitly configured account.
-    const role = isConfiguredAdminEmail(normalizedEmail) ? "admin" : "client";
-    googleUser.email = normalizedEmail;
-
-    let user = await dal.getUserByEmail(googleUser.email);
+  if (!user) {
+    user = await dal.createUser({
+      googleId: googleUser.sub,
+      email,
+      name: googleUser.name || email.split("@")[0],
+      avatarUrl: googleUser.picture,
+      role,
+      accountType: "google",
+      passwordHash: null,
+    });
 
     if (!user) {
-      // Create new user (no password set initially for Google users)
-      user = await dal.createUser({
-        googleId: googleUser.sub,
-        email: googleUser.email,
-        name: googleUser.name,
-        avatarUrl: googleUser.picture,
-        role: role,
-        accountType: "google",
-        passwordHash: null, // No password initially
-      });
-
-      if (!user) {
-        throw new Error(
-          "Failed to create user. Database might be unavailable."
-        );
-      }
-
-      await logAudit("USER_REGISTER_GOOGLE", user.id, { email: user.email });
-    } else {
-      // Existing user: reconcile the role from the server-side allowlist.
-      const updates = {};
-      if (role === "admin" && user.role !== "admin") {
-        updates.role = "admin";
-        user.role = "admin";
-      }
-      if (!user.googleId) {
-        updates.googleId = googleUser.sub;
-      }
-      // Enforce admin role for specific email if not already set
-      if (role === "admin" && user.role !== "admin") {
-        updates.role = "admin";
-        user.role = "admin"; // Update local object for token
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await dal.updateUser(user.id, updates);
-      }
-      await logAudit("USER_LOGIN_GOOGLE", user.id, { email: user.email });
+      throw new Error("Failed to create user. Database might be unavailable.");
     }
 
-    // Send security notification for admin login
-    if (user.role === "admin") {
-      // Intentionally not awaiting to avoid blocking response
-      sendLoginNotification(user.email, req.ip, req.get("User-Agent")).catch(
-        console.error
-      );
+    await logAudit("USER_REGISTER_GOOGLE", user.id, { email: user.email });
+  } else {
+    const updates = {};
+    if (!user.googleId && googleUser.sub) {
+      updates.googleId = googleUser.sub;
+      user.googleId = googleUser.sub;
+    }
+    if (googleUser.picture && googleUser.picture !== user.avatarUrl) {
+      updates.avatarUrl = googleUser.picture;
+      user.avatarUrl = googleUser.picture;
+    }
+    if (googleUser.name && googleUser.name !== user.name) {
+      updates.name = googleUser.name;
+      user.name = googleUser.name;
+    }
+    if (user.role !== role) {
+      updates.role = role;
+      user.role = role;
+    }
+    if (user.accountType !== "google" && user.accountType !== "google+neon") {
+      updates.accountType = user.passwordHash ? "google+neon" : "google";
+      user.accountType = updates.accountType;
     }
 
-    const sessionToken = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      SECRET_KEY,
-      { expiresIn: "24h" }
+    if (Object.keys(updates).length > 0) {
+      await dal.updateUser(user.id, updates);
+    }
+    await logAudit("USER_LOGIN_GOOGLE", user.id, { email: user.email });
+  }
+
+  if (user.role === "admin") {
+    sendLoginNotification(user.email, req.ip, req.get("User-Agent")).catch((err) =>
+      logger.error("Login notification failed", { message: err?.message })
+    );
+  }
+
+  const sessionToken = createSessionToken(user);
+  const signupToken = jwt.sign(
+    { email: user.email, verified: true, method: "google", mode },
+    SECRET_KEY,
+    { expiresIn: "1h" }
+  );
+
+  logger.info("Google authentication route resolved", getAuthEventPayload(user, source));
+
+  return {
+    sessionToken,
+    signupToken,
+    user,
+    redirectView: getRedirectViewForUser(user),
+    redirectRoute: getRedirectRouteForUser(user),
+  };
+};
+
+app.get("/api/auth/google/start", (req, res) => {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    return res.redirect(
+      buildClientRedirectUrl(req, {
+        auth: "google-error",
+        reason: "google_not_configured",
+      })
+    );
+  }
+
+  const mode = req.query.mode === "signup" ? "signup" : "login";
+  const state = jwt.sign(
+    {
+      mode,
+      origin: getAllowedClientOrigin(req),
+    },
+    SECRET_KEY,
+    { expiresIn: "10m" }
+  );
+
+  const authUrl = googleClient.generateAuthUrl({
+    access_type: "offline",
+    prompt: "select_account",
+    redirect_uri: getGoogleCallbackUrl(req),
+    scope: ["openid", "email", "profile"],
+    state,
+  });
+
+  res.redirect(authUrl);
+});
+
+app.get("/api/auth/google/callback", async (req, res) => {
+  const { code, error, state } = req.query;
+  let statePayload = {};
+
+  try {
+    if (error) {
+      throw new Error(`Google returned OAuth error: ${error}`);
+    }
+    if (!code || !state) {
+      throw new Error("Missing Google authorization callback data");
+    }
+
+    statePayload = jwt.verify(state, SECRET_KEY);
+    const { tokens } = await googleClient.getToken({
+      code,
+      redirect_uri: getGoogleCallbackUrl(req),
+    });
+    const googleUser = tokens.id_token
+      ? await getGoogleProfileFromToken(tokens.id_token)
+      : await getGoogleProfileFromToken(tokens.access_token);
+    const result = await completeGoogleAuthentication(
+      googleUser,
+      req,
+      statePayload.mode || "login",
+      "google_oauth_redirect"
     );
 
-    // Set secure cookie
-    res.cookie("auth_token", sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      path: "/",
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    setAuthCookie(res, result.sessionToken);
+    return res.redirect(
+      buildClientRedirectUrl(
+        req,
+        {
+          auth: "google-success",
+          redirectView: result.redirectView,
+          redirectRoute: result.redirectRoute,
+        },
+        statePayload.origin
+      )
+    );
+  } catch (callbackError) {
+    logger.error("Google OAuth callback failed", {
+      message: callbackError.message,
+      code: callbackError.code,
     });
+    return res.redirect(
+      buildClientRedirectUrl(
+        req,
+        {
+          auth: "google-error",
+          reason: callbackError.code || "google_callback_failed",
+        },
+        statePayload.origin
+      )
+    );
+  }
+});
 
-    const { passwordHash, ...safeUser } = user;
+// Google Auth (Unified for Signup and Login)
+app.post("/api/signup/verify-google", async (req, res) => {
+  const { token, mode } = req.body;
+  if (!token) return res.status(400).json({ error: "Token required" });
+  if (!GOOGLE_CLIENT_ID) {
+    return res.status(503).json({
+      error: "Google authentication is not configured",
+      fallback: "email_password",
+    });
+  }
+
+  try {
+    const googleUser = await getGoogleProfileFromToken(token);
+    const result = await completeGoogleAuthentication(
+      googleUser,
+      req,
+      mode,
+      "google_token_exchange"
+    );
+
+    setAuthCookie(res, result.sessionToken);
     res.json({
-      user: { ...safeUser, hasPassword: !!passwordHash },
-      email: user.email,
+      token: result.sessionToken,
+      user: toSafeUser(result.user),
+      email: result.user.email,
+      signupToken: result.signupToken,
+      method: "google",
+      redirectView: result.redirectView,
+      redirectRoute: result.redirectRoute,
     });
   } catch (error) {
-    console.error("Google Auth Error:", error);
-    res
-      .status(401)
-      .json({ error: "Authentication failed", details: error.message });
+    logger.error("Google authentication failed", {
+      message: error.message,
+      code: error.code,
+    });
+    res.status(error.statusCode || 401).json({
+      error: "Google authentication failed",
+      details: error.message,
+      redirectView: "landing",
+      redirectRoute: "landing",
+      fallback: "email_password",
+    });
   }
 });
 
@@ -574,10 +775,13 @@ app.post("/api/auth/google", (req, res) => {
 // Change Password
 app.post("/api/auth/change-password", authenticateToken, async (req, res) => {
   const { oldPassword, newPassword } = req.body;
-  if (!newPassword || newPassword.length < 6) {
+  if (!isStrongPassword(newPassword)) {
     return res
       .status(400)
-      .json({ error: "New password must be at least 6 characters" });
+      .json({
+        error:
+          "New password must be at least 8 characters and include uppercase, lowercase, and a number",
+      });
   }
 
   try {
@@ -599,8 +803,86 @@ app.post("/api/auth/change-password", authenticateToken, async (req, res) => {
 
     res.json({ message: "Password updated successfully" });
   } catch (error) {
-    console.error("Change Password Error:", error);
+    logger.error("Change password failed", { message: error.message });
     res.status(500).json({ error: "Failed to change password" });
+  }
+});
+
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const email = normalizeEmail(req.body.email);
+
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: "Please enter a valid email address" });
+  }
+
+  try {
+    const user = await dal.getUserByEmail(email);
+
+    if (user) {
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = hashResetToken(rawToken);
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+      await dal.createPasswordResetToken({
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      });
+
+      const resetUrl = `${CLIENT_URL.replace(/\/$/, "")}/?resetToken=${rawToken}`;
+      await sendPasswordResetEmail(user.email, resetUrl);
+      await logAudit("PASSWORD_RESET_REQUEST", user.id, { email: user.email });
+    }
+
+    // Always return the same response to avoid account enumeration.
+    res.json({
+      message:
+        "If an account exists for that email, a password reset link has been sent.",
+    });
+  } catch (error) {
+    logger.error("Password reset request failed", { message: error.message });
+    res.status(500).json({ error: "Unable to process password reset request" });
+  }
+});
+
+app.post("/api/auth/reset-password", async (req, res) => {
+  const { token, password } = req.body;
+
+  if (!token) {
+    return res.status(400).json({ error: "Reset token is required" });
+  }
+  if (!isStrongPassword(password)) {
+    return res.status(400).json({
+      error:
+        "Password must be at least 8 characters and include uppercase, lowercase, and a number",
+    });
+  }
+
+  try {
+    const tokenHash = hashResetToken(token);
+    const resetToken = await dal.getValidPasswordResetToken(tokenHash);
+
+    if (!resetToken) {
+      return res.status(400).json({ error: "Reset link is invalid or expired" });
+    }
+
+    const user = await dal.getUserById(resetToken.userId);
+    if (!user) {
+      return res.status(400).json({ error: "Reset link is invalid or expired" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    await dal.updateUser(user.id, {
+      passwordHash,
+      accountType: user.googleId ? "google+neon" : "neon",
+    });
+    await dal.markPasswordResetTokenUsed(resetToken.id);
+    await logAudit("PASSWORD_RESET_COMPLETE", user.id, { email: user.email });
+
+    res.json({ message: "Password reset successfully" });
+  } catch (error) {
+    logger.error("Password reset failed", { message: error.message });
+    res.status(500).json({ error: "Unable to reset password" });
   }
 });
 
@@ -610,70 +892,80 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
   if (!user) {
     return res.status(404).json({ message: "User not found" });
   }
-
-  // Reconcile the admin allowlist on every session restore so an older client
-  // role or JWT cannot strand the configured admin on the client dashboard.
-  if (isConfiguredAdminEmail(user.email) && user.role !== "admin") {
-    user.role = "admin";
-    await dal.updateUser(user.id, { role: "admin" });
-  }
-
   const { passwordHash, ...safeUser } = user;
-  res.json({ user: { ...safeUser, hasPassword: !!passwordHash } });
+  res.json({
+    user: { ...safeUser, hasPassword: !!passwordHash },
+    redirectView: getRedirectViewForUser(user),
+    redirectRoute: getRedirectRouteForUser(user),
+  });
 });
 
 // 0.2 Register User (Email/Password)
-app.post("/api/auth/register", async (req, res) => {
-  const { name, email, password, role, accountType } = req.body;
+app.post("/api/auth/register", async (req, res, next) => {
+  try {
+    const { name, email, password, accountType } = req.body;
+    const normalizedEmail = normalizeEmail(email);
 
-  if (!name || !email || !password) {
-    return res
-      .status(400)
-      .json({ error: "Name, email, and password are required." });
+    if (!name || !normalizedEmail || !password) {
+      return res
+        .status(400)
+        .json({ error: "Name, email, and password are required." });
+    }
+
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ error: "Please enter a valid email address." });
+    }
+
+    if (!isStrongPassword(password)) {
+      return res
+        .status(400)
+        .json({
+          error:
+            "Password must be at least 8 characters and include uppercase, lowercase, and a number.",
+        });
+    }
+
+    const existingUser = await dal.getUserByEmail(normalizedEmail);
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ error: "User already exists with this email." });
+    }
+
+    // Use bcrypt for secure password hashing (10 rounds)
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = await dal.createUser({
+      name: xss(name),
+      email: xss(normalizedEmail),
+      passwordHash: hashedPassword,
+      role: getRoleForEmail(normalizedEmail),
+      accountType: accountType || "neon",
+    });
+
+    const token = createSessionToken(newUser);
+    setAuthCookie(res, token);
+
+    // Return user without password
+    const userWithoutPassword = toSafeUser(newUser);
+
+    // Notify clients
+    io.emit("user_registered", userWithoutPassword);
+
+    logger.info(
+      "Email/password registration route resolved",
+      getAuthEventPayload(newUser, "email_password_register")
+    );
+
+    res.status(201).json({
+      token,
+      user: userWithoutPassword,
+      redirectView: getRedirectViewForUser(newUser),
+      redirectRoute: getRedirectRouteForUser(newUser),
+    });
+  } catch (error) {
+    next(error);
   }
-
-  const existingUser = await dal.getUserByEmail(email);
-  if (existingUser) {
-    return res
-      .status(400)
-      .json({ error: "User already exists with this email." });
-  }
-
-  const hashedPassword = crypto
-    .createHash("sha256")
-    .update(password)
-    .digest("hex");
-
-  const newUser = await dal.createUser({
-    name: xss(name),
-    email: xss(email),
-    passwordHash: hashedPassword,
-    role: role || "client",
-    accountType: accountType || "Auto",
-  });
-
-  const token = jwt.sign(
-    { id: newUser.id, email: newUser.email, role: newUser.role },
-    SECRET_KEY,
-    { expiresIn: "24h" }
-  );
-
-  // Set secure cookie
-  res.cookie("auth_token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    path: "/",
-    maxAge: 24 * 60 * 60 * 1000,
-  });
-
-  // Return user without password
-  const { passwordHash: _, ...userWithoutPassword } = newUser;
-
-  // Notify clients
-  io.emit("user_registered", userWithoutPassword);
-
-  res.status(201).json({ token, user: userWithoutPassword });
 });
 
 // 0.3 Get All Users (Admin)
@@ -693,7 +985,7 @@ app.get(
       const safeClients = clients.map(({ passwordHash, ...client }) => client);
       res.json(safeClients);
     } catch (error) {
-      console.error("Get Clients Error:", error);
+      logger.error("Failed to get clients", { message: error.message });
       res.status(500).json({ error: "Failed to fetch clients" });
     }
   }
@@ -709,7 +1001,7 @@ app.get(
       const projects = await dal.getAllProjects();
       res.json(projects);
     } catch (error) {
-      console.error("Get Projects Error:", error);
+      logger.error("Failed to get projects", { message: error.message });
       res.status(500).json({ error: "Failed to fetch projects" });
     }
   }
@@ -733,7 +1025,7 @@ app.post(
       });
       res.status(201).json(newProject);
     } catch (error) {
-      console.error("Create Project Error:", error);
+      logger.error("Failed to create project", { message: error.message });
       res.status(500).json({ error: "Failed to create project" });
     }
   }
@@ -755,7 +1047,7 @@ app.put(
       });
       res.json(updatedProject);
     } catch (error) {
-      console.error("Update Project Error:", error);
+      logger.error("Failed to update project", { message: error.message });
       res.status(500).json({ error: "Failed to update project" });
     }
   }
@@ -771,7 +1063,7 @@ app.delete(
       await dal.deleteProject(id);
       res.json({ message: "Project deleted successfully" });
     } catch (error) {
-      console.error("Delete Project Error:", error);
+      logger.error("Failed to delete project", { message: error.message });
       res.status(500).json({ error: "Failed to delete project" });
     }
   }
@@ -904,7 +1196,7 @@ app.post(
 
       res.status(201).json(newInvoice);
     } catch (error) {
-      console.error("Invoice generation error:", error);
+      logger.error("Invoice generation failed", { message: error.message });
       res.status(500).json({ error: "Failed to generate invoice" });
     }
   }
@@ -959,13 +1251,14 @@ app.post("/api/invoices/request", authenticateToken, async (req, res) => {
       invoice: { ...newInvoice, description: message },
     });
   } catch (error) {
-    console.error("Invoice Request Error:", error);
+    logger.error("Invoice request failed", { message: error.message });
     res.status(500).json({ error: "Failed to submit invoice request." });
   }
 });
 
-// 1q. Signup Complete (Finalize & Generate Invoice)
-app.post("/api/signup/complete", async (req, res) => {
+// 1q. Legacy signup completion endpoint retained for old clients.
+// The active endpoint is defined later with signup token validation.
+app.post("/api/signup/complete-legacy", async (req, res) => {
   const { email, finalData } = req.body;
 
   if (!email || !finalData) {
@@ -1075,7 +1368,7 @@ app.post("/api/signup/complete", async (req, res) => {
     const { passwordHash, ...safeUser } = user;
     res.json({ token, user: { ...safeUser, hasPassword: !!passwordHash } });
   } catch (error) {
-    console.error("Signup Complete Error:", error);
+    logger.error("Signup completion failed", { message: error.message });
     res.status(500).json({ error: "Failed to complete signup" });
   }
 });
@@ -1090,7 +1383,7 @@ app.get("/api/client/invoices", authenticateToken, async (req, res) => {
     }));
     res.json(decryptedInvoices);
   } catch (error) {
-    console.error("Get Invoices Error:", error);
+    logger.error("Failed to get invoices", { message: error.message });
     res.status(500).json({ error: "Failed to fetch invoices." });
   }
 });
@@ -1117,7 +1410,7 @@ app.delete("/api/client/invoices/:id", authenticateToken, async (req, res) => {
     await dal.deleteInvoice(id);
     res.json({ message: "Invoice request deleted successfully" });
   } catch (error) {
-    console.error("Delete Client Invoice Error:", error);
+    logger.error("Failed to delete client invoice", { message: error.message });
     res.status(500).json({ error: "Failed to delete invoice request." });
   }
 });
@@ -1148,7 +1441,7 @@ app.patch("/api/client/invoices/:id", authenticateToken, async (req, res) => {
     const updatedInvoice = await dal.updateInvoice(id, updates);
     res.json({ ...updatedInvoice, description: message });
   } catch (error) {
-    console.error("Update Client Invoice Error:", error);
+    logger.error("Failed to update client invoice", { message: error.message });
     res.status(500).json({ error: "Failed to update invoice request." });
   }
 });
@@ -1255,7 +1548,7 @@ app.post(
         invoice: { ...updatedInvoice, description: newDesc },
       });
     } catch (error) {
-      console.error("Payment Processing Error:", error);
+      logger.error("Payment processing failed", { message: error.message });
       res.status(500).json({ error: "Failed to process payment." });
     }
   }
@@ -1274,7 +1567,7 @@ app.get("/api/admin/invoices", authenticateToken, async (req, res) => {
     }));
     res.json(decryptedInvoices);
   } catch (error) {
-    console.error("Get Admin Invoices Error:", error);
+    logger.error("Failed to get admin invoices", { message: error.message });
     res.status(500).json({ error: "Failed to fetch invoices." });
   }
 });
@@ -1312,7 +1605,7 @@ app.post("/api/admin/invoices", authenticateToken, async (req, res) => {
 
     res.status(201).json(newInvoice);
   } catch (error) {
-    console.error("Create Invoice Error:", error);
+    logger.error("Failed to create invoice", { message: error.message });
     res.status(500).json({ error: "Failed to create invoice" });
   }
 });
@@ -1355,7 +1648,7 @@ app.patch("/api/admin/invoices/:id", authenticateToken, async (req, res) => {
     io.emit("invoice_updated", updatedInvoice);
     res.json(updatedInvoice);
   } catch (error) {
-    console.error("Update Invoice Error:", error);
+    logger.error("Failed to update invoice", { message: error.message });
     res.status(500).json({ error: "Failed to update invoice" });
   }
 });
@@ -1378,7 +1671,7 @@ app.delete("/api/admin/invoices/:id", authenticateToken, async (req, res) => {
     await logAudit("DELETE_INVOICE", req.user.username, { invoiceId: id });
     res.json({ message: "Invoice deleted" });
   } catch (error) {
-    console.error("Delete Invoice Error:", error);
+    logger.error("Failed to delete invoice", { message: error.message });
     res.status(500).json({ error: "Failed to delete invoice" });
   }
 });
@@ -1393,7 +1686,7 @@ app.get(
       const stats = await dal.getDashboardStats();
       res.json(stats);
     } catch (error) {
-      console.error("Dashboard Stats Error:", error);
+      logger.error("Dashboard stats retrieval failed", { message: error.message });
       res.status(500).json({ error: "Failed to fetch dashboard stats" });
     }
   }
@@ -1437,7 +1730,7 @@ app.get(
         database: dbHealth,
       });
     } catch (error) {
-      console.error("System Health Error:", error);
+      logger.error("System health check failed", { message: error.message });
       res.status(500).json({ error: "Failed to fetch system health" });
     }
   }
@@ -1451,7 +1744,7 @@ app.get("/api/admin/audit-logs", authenticateToken, async (req, res) => {
     const logs = await dal.getAllAuditLogs();
     res.json(logs);
   } catch (error) {
-    console.error("Get Audit Logs Error:", error);
+    logger.error("Failed to get audit logs", { message: error.message });
     res.status(500).json({ error: "Failed to fetch audit logs." });
   }
 });
@@ -1600,8 +1893,9 @@ app.get("/api/clients", authenticateToken, async (req, res) => {
 // 2. Login (Admin & Client)
 app.post("/api/login", async (req, res) => {
   const { username, password } = req.body; // username is email for clients
+  const normalizedEmail = normalizeEmail(username);
 
-  if (!username || !password) {
+  if (!normalizedEmail || !password) {
     return res
       .status(400)
       .json({ error: "Email/Username and password are required" });
@@ -1609,7 +1903,7 @@ app.post("/api/login", async (req, res) => {
 
   try {
     // 2. Check for real user in DB
-    const user = await dal.getUserByEmail(username);
+    let user = await dal.getUserByEmail(normalizedEmail);
 
     if (!user) {
       return res.status(401).json({ error: "Invalid credentials" });
@@ -1628,29 +1922,31 @@ app.post("/api/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // 4. Generate Token
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      SECRET_KEY,
-      { expiresIn: "24h" }
-    );
+    const expectedRole = getRoleForEmail(user.email);
+    if (user.role !== expectedRole) {
+      user = await dal.updateUser(user.id, { role: expectedRole });
+    }
 
-    // Set secure cookie
-    res.cookie("auth_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      path: "/",
-      maxAge: 24 * 60 * 60 * 1000,
-    });
+    // 4. Generate Token
+    const token = createSessionToken(user);
+    setAuthCookie(res, token);
 
     // 5. Audit Log
     await logAudit("USER_LOGIN", user.id, { email: user.email });
 
-    const { passwordHash, ...safeUser } = user;
-    res.json({ token, user: { ...safeUser, hasPassword: !!passwordHash } });
+    logger.info(
+      "Email/password login route resolved",
+      getAuthEventPayload(user, "email_password_login")
+    );
+
+    res.json({
+      token,
+      user: toSafeUser(user),
+      redirectView: getRedirectViewForUser(user),
+      redirectRoute: getRedirectRouteForUser(user),
+    });
   } catch (error) {
-    console.error("Login Error:", error);
+    logger.error("Login failed", { message: error.message });
     res.status(500).json({ error: "Login failed" });
   }
 });
@@ -1676,7 +1972,7 @@ app.get("/api/projects/options", async (req, res) => {
     // Fallback to constants
     res.json(PROJECT_TYPES);
   } catch (error) {
-    console.error("Get Project Options Error:", error);
+    logger.error("Failed to get project options", { message: error.message });
     res.status(500).json({ error: "Failed to fetch project options" });
   }
 });
@@ -1702,7 +1998,7 @@ app.put(
 
       res.json({ message: "Project options updated" });
     } catch (error) {
-      console.error("Update Project Options Error:", error);
+      logger.error("Failed to update project options", { message: error.message });
       res.status(500).json({ error: "Failed to update project options" });
     }
   }
@@ -1734,7 +2030,7 @@ app.patch(
 
       res.json(updatedInvoice);
     } catch (error) {
-      console.error("Verify Invoice Error:", error);
+      logger.error("Invoice verification failed", { message: error.message });
       res.status(500).json({ error: "Failed to verify invoice" });
     }
   }
@@ -1891,7 +2187,7 @@ app.post("/api/subscriptions", authenticateToken, async (req, res) => {
       // Update subscription with invoice reference? Not in schema, but useful.
     }
   } catch (err) {
-    console.error("Auto-Invoice Error:", err);
+    logger.error("Auto-invoice generation failed", { message: err.message });
     // Don't fail subscription creation if invoice fails
   }
 
@@ -1964,7 +2260,7 @@ app.patch(
             });
           }
         } catch (err) {
-          console.error("Error activating project:", err);
+          logger.error("Project activation failed", { message: err.message });
         }
 
         io.emit("new_project", {
@@ -2041,7 +2337,7 @@ app.put(
       });
       res.json(updatedSub);
     } catch (error) {
-      console.error("Update Subscription Error:", error);
+      logger.error("Subscription update failed", { message: error.message });
       res.status(500).json({ error: "Failed to update subscription" });
     }
   }
@@ -2063,7 +2359,7 @@ app.delete(
       await logAudit("DELETE_SUBSCRIPTION", req.user.username, { subId: id });
       res.json({ message: "Subscription deleted successfully" });
     } catch (error) {
-      console.error("Delete Subscription Error:", error);
+      logger.error("Subscription deletion failed", { message: error.message });
       res.status(500).json({ error: "Failed to delete subscription" });
     }
   }
@@ -2123,7 +2419,7 @@ app.post("/api/invoices/generate", authenticateToken, async (req, res) => {
 
     res.status(201).json(newInvoice);
   } catch (error) {
-    console.error("Invoice Generation Error:", error);
+    logger.error("Invoice generation failed", { message: error.message });
     res.status(500).json({ error: "Failed to generate invoice" });
   }
 });
@@ -2250,19 +2546,22 @@ app.patch(
 
 // --- Multi-Step Signup Endpoints ---
 
-// 10. Google Verification
-app.post("/api/signup/verify-google", async (req, res) => {
-  console.log("Verify Google Request Body:", req.body);
+// 10. Legacy Google verification-only endpoint. The primary Google auth route
+// above creates or logs in users and also returns a temporary signup token.
+app.post("/api/signup/verify-google-token", async (req, res) => {
   const { token } = req.body;
-  console.log("GOOGLE_CLIENT_ID:", process.env.GOOGLE_CLIENT_ID);
+  logger.debug("Google verification requested");
 
   if (!token) return res.status(400).json({ error: "Token is required" });
 
   try {
-    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    if (!GOOGLE_CLIENT_ID) {
+      return res.status(503).json({ error: "Google authentication is not configured" });
+    }
+    const client = new OAuth2Client(GOOGLE_CLIENT_ID);
     const ticket = await client.verifyIdToken({
       idToken: token,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: GOOGLE_CLIENT_ID,
     });
     const payload = ticket.getPayload();
     const { email, email_verified } = payload;
@@ -2283,11 +2582,11 @@ app.post("/api/signup/verify-google", async (req, res) => {
         signupToken,
       });
     } else {
-      console.warn(`Google email not verified for ${email}`);
-      res.status(400).json({ error: "Google email not verified" });
+      logger.warn("Google email not verified");
+      res.status(400).json({ error: "Email not verified" });
     }
   } catch (error) {
-    console.error("Google verification error:", error);
+    logger.error("Google verification failed", { message: error.message });
     // Provide more specific error messages if possible
     const errorMessage = error.message || "Invalid Google Token";
     res
@@ -2327,14 +2626,15 @@ app.get("/api/signup/progress", async (req, res) => {
     const data = JSON.parse(decrypt(record.data));
     res.json({ data });
   } catch (e) {
-    console.error("Decrypt error:", e);
+    logger.error("Decryption failed", { message: e.message });
     res.status(500).json({ error: "Failed to decrypt data" });
   }
 });
 
 // 10e. Complete Signup
 app.post("/api/signup/complete", async (req, res) => {
-  const { email, finalData, signupToken } = req.body;
+  const { finalData, signupToken } = req.body;
+  const email = normalizeEmail(req.body.email);
 
   try {
     // Verify signup token if present (for passwordless/Google signup)
@@ -2346,7 +2646,7 @@ app.post("/api/signup/complete", async (req, res) => {
           isVerified = true;
         }
       } catch (err) {
-        console.warn("Invalid signup token:", err.message);
+        logger.warn("Invalid signup token");
       }
     }
 
@@ -2362,18 +2662,15 @@ app.post("/api/signup/complete", async (req, res) => {
       }
 
       const hashedPassword = finalData.password
-        ? crypto.createHash("sha256").update(finalData.password).digest("hex")
-        : crypto
-            .createHash("sha256")
-            .update(crypto.randomBytes(32).toString("hex"))
-            .digest("hex"); // Random password for verified users
+        ? await bcrypt.hash(finalData.password, 10)
+        : null;
 
       user = await dal.createUser({
         name: xss(finalData.name || "Client"),
         email: xss(email),
         passwordHash: hashedPassword,
         role: "client",
-        accountType: "Transparent Package", // Default or from finalData
+        accountType: isVerified ? "google" : "neon",
         company: xss(finalData.companyName || ""),
       });
       isNewUser = true;
@@ -2467,7 +2764,7 @@ app.post("/api/signup/complete", async (req, res) => {
         });
       }
     } catch (invError) {
-      console.error("Auto-Invoice Generation Error:", invError);
+      logger.error("Auto-invoice generation failed", { message: invError.message });
       // Continue without failing signup
     }
 
@@ -2483,11 +2780,8 @@ app.post("/api/signup/complete", async (req, res) => {
     });
 
     // 5. Generate Token
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      SECRET_KEY,
-      { expiresIn: "24h" }
-    );
+    const token = createSessionToken(user);
+    setAuthCookie(res, token);
 
     // Emit socket event for real-time dashboard updates
     io.emit("new_user", {
@@ -2499,10 +2793,10 @@ app.post("/api/signup/complete", async (req, res) => {
     res.status(201).json({
       message: "Signup completed successfully",
       token,
-      user: { ...user, password: undefined },
+      user: toSafeUser(user),
     });
   } catch (error) {
-    console.error("Signup Completion Error:", error);
+    logger.error("Signup completion failed", { message: error.message });
     res.status(500).json({ error: "Signup failed" });
   }
 });
@@ -2512,7 +2806,7 @@ app.post("/api/webhooks/payment", async (req, res) => {
   // In a real scenario, verify signature from payment provider (e.g., Paystack/Stripe signature)
   const { reference, status, amount, externalId } = req.body;
 
-  console.log("Payment Webhook Received:", req.body);
+  logger.info("Payment webhook received", { reference, status });
 
   if (!reference || !status) {
     return res.status(400).json({ error: "Invalid payload" });
@@ -2531,7 +2825,7 @@ app.post("/api/webhooks/payment", async (req, res) => {
 
     if (!invoice) {
       // If not found by invoice reference, maybe it's a payment transaction reference
-      console.warn(`Invoice not found for webhook reference: ${reference}`);
+      logger.warn("Invoice not found for webhook reference", { reference });
       return res.status(404).json({ message: "Invoice not found" });
     }
 
@@ -2575,7 +2869,7 @@ app.post("/api/webhooks/payment", async (req, res) => {
 
     res.status(200).json({ received: true });
   } catch (error) {
-    console.error("Webhook processing error:", error);
+    logger.error("Webhook processing failed", { message: error.message });
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -2647,7 +2941,7 @@ app.patch("/api/:resource/:id", authenticateToken, async (req, res) => {
     io.emit(`update_${resource}`, updatedItem); // Notify clients
     res.json(updatedItem);
   } catch (error) {
-    console.error(`Update error for ${resource}:`, error);
+    logger.error("Resource update failed", { resource, message: error.message });
     res.status(500).json({ error: "Update failed" });
   }
 });
@@ -2676,7 +2970,7 @@ app.delete("/api/:resource/:id", authenticateToken, async (req, res) => {
     io.emit(`delete_${resource}`, id); // Notify clients
     res.json({ message: "Deleted successfully" });
   } catch (error) {
-    console.error(`Delete error for ${resource}:`, error);
+    logger.error("Resource deletion failed", { resource, message: error.message });
     res.status(500).json({ error: "Delete failed" });
   }
 });
@@ -2744,7 +3038,7 @@ app.get("/api/settings", async (req, res) => {
     const bankDetails = await dal.getSystemSetting("bank_details");
     res.json(bankDetails?.value || {});
   } catch (err) {
-    console.error("Error fetching settings:", err);
+    logger.error("Settings retrieval failed", { message: err.message });
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -2765,7 +3059,7 @@ app.put(
       });
       res.json(updated.value);
     } catch (err) {
-      console.error("Error saving settings:", err);
+      logger.error("Settings save failed", { message: err.message });
       res.status(500).json({ error: "Internal Server Error" });
     }
   }
@@ -2773,25 +3067,47 @@ app.put(
 
 // --- Global Error Handler ---
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  logger.error("Unexpected error", { stack: err?.stack });
   res
     .status(500)
     .json({ error: "Internal Server Error", details: err.message });
 });
 
 // --- Socket.io ---
-io.on("connection", (socket) => {
-  console.log("Client connected");
-  socket.on("disconnect", () => {
-    console.log("Client disconnected");
+// Note: Connection logging already handled above with logger.debug()
+
+// Error Handler Middleware (must be after all other middleware/routes)
+app.use(errorHandler);
+
+// Global Promise Rejection Handler
+process.on("unhandledRejection", (reason, promise) => {
+  logger.error("Unhandled promise rejection", {
+    reason: String(reason),
+    promise: String(promise),
+    timestamp: new Date().toISOString(),
   });
+});
+
+// Global Uncaught Exception Handler
+process.on("uncaughtException", (error) => {
+  logger.error("Uncaught exception", {
+    error: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString(),
+  });
+  // Gracefully shutdown
+  process.exit(1);
 });
 
 // --- Start Server ---
 // Only listen if NOT running on Vercel (or similar environment)
 if (require.main === module) {
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    logger.info("Server started", {
+      port: PORT,
+      nodeEnv: process.env.NODE_ENV,
+      url: `http://0.0.0.0:${PORT}`,
+    });
   });
 }
 

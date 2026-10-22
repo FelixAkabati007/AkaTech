@@ -1,8 +1,7 @@
 import React, { useState, useEffect, Suspense, lazy } from "react";
-import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastProvider } from "@components/ui/ToastProvider";
 import { SyncStatusProvider } from "@components/ui/SyncStatusProvider";
-import { Toaster } from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 import { ScrollProgress } from "@components/ui/ScrollProgress";
 import { ShowcaseNav } from "@components/ui/ShowcaseNav";
 import { Navbar } from "@components/layout/Navbar";
@@ -18,6 +17,44 @@ import { CookieConsent } from "@components/ui/CookieConsent";
 import AdinkraBackground from "@components/ui/AdinkraBackground";
 import { useTheme } from "./hooks/useTheme";
 import { Analytics } from "@vercel/analytics/react";
+
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("App section failed to render:", error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <main className="min-h-screen bg-white px-6 py-24 text-gray-900 dark:bg-akatech-black dark:text-white">
+          <div className="mx-auto max-w-2xl rounded-lg border border-akatech-gold/30 bg-white/90 p-8 shadow-xl dark:bg-akatech-card">
+            <p className="mb-2 text-xs font-bold uppercase tracking-widest text-akatech-gold">
+              Preview recovered
+            </p>
+            <h1 className="mb-4 text-3xl font-serif">
+              This section could not load.
+            </h1>
+            <p className="text-gray-600 dark:text-gray-300">
+              The rest of the site is still available. Refresh the page after
+              checking the browser console or local configuration.
+            </p>
+          </div>
+        </main>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 // Lazy load pages
 const Dashboard = lazy(() =>
@@ -71,12 +108,65 @@ const PlanCompletion = lazy(() =>
 export default function App() {
   const [view, setView] = useState("landing"); // landing | dashboard | portfolio | plan-completion | careers | privacy | cookie | terms
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState("login");
+  const [resetToken, setResetToken] = useState(null);
   const [user, setUser] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
+  const [isGoogleAuthAvailable, setIsGoogleAuthAvailable] = useState(true);
   const { mode, cycleTheme } = useTheme();
 
+  const clearAuthQueryParams = () => {
+    const url = new URL(window.location.href);
+    ["auth", "reason", "redirectView", "redirectRoute"].forEach((param) =>
+      url.searchParams.delete(param)
+    );
+    window.history.replaceState({}, "", url.toString());
+  };
+
+  const routeAuthenticatedUser = (authPayload, source = "auth") => {
+    const nextUser = authPayload?.user;
+    if (!nextUser?.email) {
+      setUser(null);
+      setAuthModalOpen(false);
+      setView("landing");
+      toast.error("Authentication completed, but no user email was returned.");
+      return;
+    }
+
+    const redirectView =
+      authPayload.redirectView === "dashboard" ? "dashboard" : "landing";
+
+    setUser(nextUser);
+    setAuthModalOpen(false);
+    setView(redirectView);
+    window.scrollTo(0, 0);
+
+    if (import.meta.env.DEV) {
+      const maskedEmail = nextUser.email.replace(/^(.{2}).*(@.*)$/, "$1***$2");
+      console.info("Auth route resolved", {
+        source,
+        email: maskedEmail,
+        role: nextUser.role || "client",
+        redirectView,
+        redirectRoute:
+          authPayload.redirectRoute ||
+          (nextUser.role === "admin" ? "admin" : "client"),
+      });
+    }
+  };
+
   useEffect(() => {
-    // Attempt to fetch user using cookie
+    const params = new URLSearchParams(window.location.search);
+    const googleAuthResult = params.get("auth");
+
+    if (googleAuthResult === "google-error") {
+      setUser(null);
+      setView("landing");
+      toast.error("Google sign-in failed. Please try again or use email.");
+      clearAuthQueryParams();
+      return;
+    }
+
     fetch("/api/auth/me", {
       credentials: "include",
     })
@@ -85,34 +175,44 @@ export default function App() {
         throw new Error("Session expired");
       })
       .then((data) => {
-        setUser(data.user);
-        setView("dashboard");
+        if (googleAuthResult === "google-success") {
+          routeAuthenticatedUser(data, "google_oauth_callback");
+          toast.success("Signed in with Google");
+          clearAuthQueryParams();
+        } else {
+          setUser(data.user);
+        }
       })
       .catch(() => {
         setUser(null);
+        if (googleAuthResult === "google-success") {
+          setView("landing");
+          toast.error("Google sign-in completed, but the session was not found.");
+          clearAuthQueryParams();
+        }
       });
   }, []);
 
-  const loadAuthenticatedUser = async (fallbackUser) => {
-    const sessionResponse = await fetch("/api/auth/me", {
-      credentials: "include",
-    });
-
-    if (sessionResponse.ok) {
-      const session = await sessionResponse.json();
-      if (session?.user?.id) return session.user;
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("resetToken");
+    if (token) {
+      setResetToken(token);
+      setAuthModalMode("reset");
+      setAuthModalOpen(true);
     }
+  }, []);
 
-    if (fallbackUser?.id) return fallbackUser;
-    throw new Error("Authenticated session could not be loaded");
-  };
-
-  const completeLogin = async (fallbackUser) => {
-    const authenticatedUser = await loadAuthenticatedUser(fallbackUser);
-    setUser(authenticatedUser);
-    setAuthModalOpen(false);
-    setView("dashboard");
-  };
+  useEffect(() => {
+    fetch("/api/auth/config")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((config) => {
+        setIsGoogleAuthAvailable(Boolean(config?.googleAuthAvailable));
+      })
+      .catch(() => {
+        setIsGoogleAuthAvailable(false);
+      });
+  }, []);
 
   const handleLogin = (email, password) => {
     return fetch("/api/login", {
@@ -128,7 +228,33 @@ export default function App() {
         }
         return res.json();
       })
-      .then((data) => completeLogin(data.user));
+      .then((data) => {
+        routeAuthenticatedUser(data, "email_password_login");
+      });
+  };
+
+  const handleSignup = ({ name, email, password }) => {
+    return fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+        accountType: "neon",
+      }),
+      credentials: "include",
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || data.message || "Signup failed");
+        }
+        return data;
+      })
+      .then((data) => {
+        routeAuthenticatedUser(data, "email_password_signup");
+      });
   };
 
   const handleUserUpdate = (updatedUser) => {
@@ -156,49 +282,53 @@ export default function App() {
     if (newView !== "plan-completion") setSelectedPlan(null);
   };
 
-  const handleGoogleLogin = (tokenResponse) => {
-    fetch("/api/signup/verify-google", {
+  const handleGoogleLogin = ({ mode = "login" } = {}) => {
+    const params = new URLSearchParams({ mode });
+    window.location.assign(`/api/auth/google/start?${params.toString()}`);
+  };
+
+  const handleRequestPasswordReset = (email) => {
+    return fetch("/api/auth/forgot-password", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ token: tokenResponse.access_token }),
-      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Unable to request password reset");
+      }
+      return data;
+    });
+  };
+
+  const handleResetPassword = ({ token, password }) => {
+    return fetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password }),
     })
       .then(async (res) => {
-        if (res.ok) return res.json();
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(
-          errData.error || errData.details || "Google auth failed"
-        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || "Unable to reset password");
+        }
+        return data;
       })
-      .then((data) => completeLogin(data.user))
-      .catch((err) => {
-        console.error("Google Login Error:", err);
+      .then((data) => {
+        setResetToken(null);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("resetToken");
+        window.history.replaceState({}, "", url.toString());
+        return data;
       });
   };
 
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim();
-
-  useEffect(() => {
-    if (!googleClientId) {
-      console.warn(
-        "Google Sign-In is disabled because VITE_GOOGLE_CLIENT_ID is not configured."
-      );
-    }
-  }, [googleClientId]);
-
-  return (
-    <GoogleOAuthProvider
-      clientId={googleClientId || "google-auth-disabled"}
-      onScriptLoadError={() =>
-        console.error("Google Sign-In script failed to load")
-      }
-    >
-      <div className={`min-h-screen ${mode} transition-colors duration-300`}>
-        <Analytics />
-        <ToastProvider>
-          <SyncStatusProvider>
+  const appContent = (
+    <div className={`min-h-screen ${mode} transition-colors duration-300`}>
+      <Analytics />
+      <ToastProvider>
+        <SyncStatusProvider>
+          <AppErrorBoundary>
             <div className="bg-white dark:bg-akatech-black text-gray-900 dark:text-white min-h-screen transition-colors duration-300">
               {/* <AdinkraBackground /> */}
               <img
@@ -214,7 +344,7 @@ export default function App() {
                       ? setView("landing")
                       : user
                       ? setView("dashboard")
-                      : setAuthModalOpen(true)
+                      : (setAuthModalMode("login"), setAuthModalOpen(true))
                   }
                   isLoggedIn={!!user}
                   user={user}
@@ -289,16 +419,32 @@ export default function App() {
               <CookieConsent />
               <AuthModal
                 isOpen={authModalOpen}
-                onClose={() => setAuthModalOpen(false)}
+                onClose={() => {
+                  setAuthModalOpen(false);
+                  if (resetToken) {
+                    setResetToken(null);
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("resetToken");
+                    window.history.replaceState({}, "", url.toString());
+                  }
+                }}
                 onLogin={handleLogin}
+                onSignup={handleSignup}
                 onGoogleLogin={handleGoogleLogin}
-                googleEnabled={Boolean(googleClientId)}
+                onGoogleUnavailable={() => setIsGoogleAuthAvailable(false)}
+                onRequestPasswordReset={handleRequestPasswordReset}
+                onResetPassword={handleResetPassword}
+                resetToken={resetToken}
+                initialMode={authModalMode}
+                isGoogleAuthAvailable={isGoogleAuthAvailable}
               />
               <Toaster position="top-center" />
             </div>
-          </SyncStatusProvider>
-        </ToastProvider>
-      </div>
-    </GoogleOAuthProvider>
+          </AppErrorBoundary>
+        </SyncStatusProvider>
+      </ToastProvider>
+    </div>
   );
+
+  return appContent;
 }
