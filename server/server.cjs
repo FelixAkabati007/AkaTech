@@ -39,7 +39,10 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:5173", // Vite via IPv4
   "http://localhost:5175", // Current dev port
   "http://localhost:3000", // Common alternative
-];
+  process.env.V0_RUNTIME_URL,
+  process.env.V0_BUILD_URL,
+  process.env.V0_SANDBOX_URL,
+].filter(Boolean);
 
 if (!GOOGLE_CLIENT_ID) {
   logger.warn(
@@ -111,7 +114,10 @@ app.use(
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      const isVercelPreviewOrigin =
+        typeof origin === "string" &&
+        (origin.endsWith(".vercel.run") || origin.endsWith(".v0.build"));
+      if (!origin || ALLOWED_ORIGINS.includes(origin) || isVercelPreviewOrigin) {
         callback(null, true);
       } else {
         logger.warn("CORS blocked for origin", { origin });
@@ -1905,27 +1911,26 @@ app.post("/api/login", async (req, res) => {
   }
 
   try {
-    // 2. Check for real user in DB
-    let user = await dal.getUserByEmail(normalizedEmail);
+    // 2. Resolve the temporary admin before touching the database so local admin access
+    // remains available while the database integration is being configured.
+    const isTemporaryAdminLogin =
+      normalizedEmail === NORMALIZED_ADMIN_EMAIL &&
+      (await bcrypt.compare(password, ADMIN_PASSWORD_HASH));
+    let user;
 
-    if (!user) {
-      const isTemporaryAdminLogin =
-        normalizedEmail === NORMALIZED_ADMIN_EMAIL &&
-        (await bcrypt.compare(password, ADMIN_PASSWORD_HASH));
-
-      if (isTemporaryAdminLogin) {
-        user = {
-          id: "temporary-admin",
-          email: NORMALIZED_ADMIN_EMAIL,
-          username: NORMALIZED_ADMIN_EMAIL,
-          name: "Administrator",
-          role: "admin",
-          passwordHash: ADMIN_PASSWORD_HASH,
-          hasPassword: true,
-        };
-      } else {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
+    if (isTemporaryAdminLogin) {
+      user = {
+        id: "temporary-admin",
+        email: NORMALIZED_ADMIN_EMAIL,
+        username: NORMALIZED_ADMIN_EMAIL,
+        name: "Administrator",
+        role: "admin",
+        passwordHash: ADMIN_PASSWORD_HASH,
+        hasPassword: true,
+      };
+    } else {
+      user = await dal.getUserByEmail(normalizedEmail);
+      if (!user) return res.status(401).json({ error: "Invalid credentials" });
     }
 
     // 3. Verify Password
@@ -1951,7 +1956,9 @@ app.post("/api/login", async (req, res) => {
     setAuthCookie(res, token);
 
     // 5. Audit Log
-    await logAudit("USER_LOGIN", user.id, { email: user.email });
+    if (user.id !== "temporary-admin") {
+      await logAudit("USER_LOGIN", user.id, { email: user.email });
+    }
 
     logger.info(
       "Email/password login route resolved",
